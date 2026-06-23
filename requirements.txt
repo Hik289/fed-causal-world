@@ -1,0 +1,21 @@
+# Core scientific stack
+numpy>=1.24,<2.0
+scipy>=1.10
+pandas>=2.0
+scikit-learn>=1.3
+
+# LLM clients (any one is enough; we used litellm + openai)
+openai>=1.30
+litellm>=1.40
+
+# Agentic benchmarks (install from upstream)
+# tau-bench: https://github.com/sierra-research/tau-bench
+# alfworld: https://github.com/alfworld/alfworld
+
+# Standard libs
+tqdm>=4.65
+PyYAML>=6.0
+
+# Optional: visualization / analysis
+matplotlib>=3.7
+seaborn>=0.12
