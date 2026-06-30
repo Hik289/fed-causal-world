@@ -1,143 +1,281 @@
+<div align="center">
+
 # FedCausalWorld
 
-Official code for **FedCausalWorld: Federated Causal World Models for Agentic LLMs**.
+### Federated Causal World Models for Agentic LLMs
 
-FedCausalWorld studies whether multiple agents can build a shared world model without sharing their local interaction data. The main idea is to represent local experience using causal transition structures, aggregate stable causal relations across clients, and use the resulting federated world model to guide planning and tool use.
+[![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](#installation)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Benchmarks](https://img.shields.io/badge/benchmarks-tau--bench%20%7C%20ALFWorld%20%7C%20SCM-purple.svg)](#benchmarks)
+[![Artifact](https://img.shields.io/badge/artifact-conference--style%20release-lightgrey.svg)](#quick-start)
 
-The repository includes experiments on **τ-bench Retail**, **τ-bench Airline**, **ALFWorld**, and synthetic structural causal model (SCM) tasks.
+**Anonymous code release for the FedCausalWorld manuscript.**
+
+[Overview](#overview) | [Method](#method) | [Quick Start](#quick-start) | [Benchmarks](#benchmarks) | [Citation](#citation)
+
+</div>
+
+> **TL;DR.** FedCausalWorld studies whether multiple private clients can
+> compose a shared causal world model for tool-using LLM agents without
+> centralizing local trajectories. Clients validate intervention-response
+> structure locally; the server aggregates causal graph information, performs
+> causal adjustment/rollout, and returns decentralized control signals for
+> downstream agent planning.
+
+<p align="center">
+  <img src="fig1_pipeline_v2.png" width="92%" alt="FedCausalWorld client-server pipeline">
+</p>
+<p align="center">
+  <em>Figure 1. FedCausalWorld pipeline: local intervention sampling and edge validation feed server-side adjustment and causal rollout.</em>
+</p>
 
 ## Overview
 
-Standard federated world models may combine correlations that hold only in specific clients or environments. Under client heterogeneity and distribution shift, these correlations can produce incorrect transition predictions and poor downstream decisions.
+Modern tool-using agents operate over modular worlds: account systems,
+payment gateways, inventory modules, text environments, household simulators,
+and other partially observed components. A purely sequential world model can
+learn correlations in these traces, but those correlations often fail under
+client heterogeneity, latent confounding, and distribution shift.
 
-FedCausalWorld separates local transition information into causal relations and environment-specific associations. Each client estimates a local world model from its private trajectories. The server aggregates stable relations across clients and returns a shared causal world model for agent planning.
+FedCausalWorld frames world-model sharing as **federated causal graph
+composition**. Each client keeps its private interaction data local, estimates
+candidate causal relations from interventions and responses, and shares only
+validated interface structure. The server composes those structures into a
+global causal world model used for planning, rollout, and prompt-level control.
 
-The code supports comparisons with:
+This repository contains:
 
-- global sequential world models;
-- federated models without causal filtering;
-- models without intervention or control information;
-- local-only models;
-- oracle causal world models.
+- A six-step **FedCausalCompose** pipeline for local module discovery,
+  interface validation, causal graph composition, and decentralized control.
+- Synthetic structural causal model (SCM) experiments for theory checks,
+  including confounder shift, ICP validation, horizon scaling, and
+  do-calculus non-identifiability.
+- Agentic evaluation drivers for **tau-bench Retail**, **tau-bench Airline**,
+  and **ALFWorld**.
+- Multi-seed reproducibility scripts for studying variance in hosted LLM-agent
+  benchmarks.
 
-## Repository Structure
+## Method
+
+FedCausalWorld separates graph aggregation from parameter averaging. Clients
+estimate local causal modules and intervention-response edges; the server
+aggregates stable interface structure rather than raw data or model weights.
+
+<p align="center">
+  <img src="fig2_federated_loop_v2.png" width="78%" alt="Federated causal loop">
+</p>
+<p align="center">
+  <em>Figure 2. Federated causal loop across modular clients and an interface graph server.</em>
+</p>
+
+The core implementation in `src/fed_causal/pipeline.py` follows six steps:
+
+1. **Local module identification**: define local state variables, actions, and
+   incoming/outgoing interface events.
+2. **Interface discovery**: propose cross-module edges from temporally matched
+   outgoing and incoming events.
+3. **Distributed intervention matching**: match `do(.)` events to downstream
+   responses while tracking `N_min`, `q_hat`, `r_hat`, and verification
+   probability.
+4. **Cross-module edge validation**: retain edges that pass the
+   intervention-response verification threshold.
+5. **Causal composition**: compose a directed interface graph and perform
+   topological causal rollout.
+6. **Decentralized causal control**: emit module-level upstream/downstream
+   constraints for agent planning.
+
+## Empirical Takeaways
+
+The repository is designed to test when causal world-model information helps
+and when prescriptive control can be brittle. In tool environments with
+explicit arguments, causal control can improve downstream decisions; in text
+environments where causal state is implicit, the same control signal can be
+less reliable.
+
+<p align="center">
+  <img src="fig3_causal_control_v2.png" width="92%" alt="Causal control in tau-bench and ALFWorld">
+</p>
+<p align="center">
+  <em>Figure 3. Causal graph information and causal control behave differently in explicit tool environments and implicit text environments.</em>
+</p>
+
+<p align="center">
+  <img src="fig4_intuition_v2.png" width="92%" alt="Causal information helps everywhere while causal prescription depends on environment explicitness">
+</p>
+<p align="center">
+  <em>Figure 4. High-level finding: causal information helps broadly, while causal prescription depends on environment explicitness.</em>
+</p>
+
+## Repository Layout
 
 ```text
 fedcausalworld/
-├── src/fed_causal/       # Core models, metrics, traces, and LLM interface
-├── experiments/          # Synthetic and agentic experiment scripts
-├── scripts/              # Reproduction scripts
-├── requirements.txt
+├── README.md
 ├── LICENSE
-└── README.md
-```
-
-The main components are:
-
-```text
-src/fed_causal/
-├── synthetic_scm_skeleton.py   # Synthetic SCM generator
-├── pipeline.py                 # World-model training and aggregation
-├── metrics.py                  # Evaluation metrics
-├── event_traces.py             # Agent trajectory processing
-├── llm_client.py               # OpenAI-compatible API client
-└── baselines/                  # Baseline implementations
+├── requirements.txt
+├── fig1_pipeline_v2.png
+├── fig2_federated_loop_v2.png
+├── fig3_causal_control_v2.png
+├── fig4_intuition_v2.png
+├── src/fed_causal/
+│   ├── synthetic_scm_skeleton.py      # Synthetic SCM generator
+│   ├── pipeline.py                    # Six-step FedCausalCompose pipeline
+│   ├── event_traces.py                # Event-trace utilities
+│   ├── metrics.py                     # Task metrics and CIs
+│   ├── llm_client.py                  # OpenAI-compatible chat wrapper
+│   └── baselines/                     # B0-B11 baseline prompts/models
+├── experiments/
+│   ├── anchor4_v5_icp.py              # ICP edge-validation check
+│   ├── anchor4_v9_b10fix.py           # Confounder-shift oracle check
+│   ├── anchor4_v10_horizon.py         # Horizon scaling check
+│   ├── p11_taubench_3seed.py          # tau-bench Retail multi-seed run
+│   ├── p12_alf_3seed_v2.py            # ALFWorld multi-seed run
+│   ├── p13_b8e_icp.py                 # ICP-validated framing test
+│   ├── p14_federated_3client.py       # Federated three-client experiment
+│   ├── p15_synthetic_3seed.py         # Synthetic three-seed audit
+│   ├── p22_docalculus_synthetic.py    # Pearl-style do-calculus check
+│   └── p25_airline.py                 # tau-bench Airline validation
+└── scripts/
+    └── reproduce.sh                   # CPU-only synthetic/theory driver
 ```
 
 ## Installation
 
-Create a Python 3.11 environment and install the dependencies:
+Create a fresh Python 3.11 environment:
 
 ```bash
-conda create -n fedcausal python=3.11 -y
-conda activate fedcausal
+conda create -n fedcausalworld python=3.11 -y
+conda activate fedcausalworld
 pip install -r requirements.txt
 ```
 
-The agent experiments require an OpenAI-compatible chat-completions endpoint. Set the API endpoint, key, and model name in the LLM configuration used by the experiment scripts.
+Optional benchmark packages:
 
-Example:
+```bash
+# tau-bench
+pip install tau-bench
 
-```python
-AZURE_API_KEY = "YOUR_API_KEY"
-AZURE_API_BASE = "YOUR_API_ENDPOINT"
-MODEL_NAME = "YOUR_MODEL_NAME"
+# ALFWorld: follow the official setup and download the valid_unseen data
+# https://github.com/alfworld/alfworld
 ```
 
-## Benchmarks
+The synthetic SCM experiments require only the dependencies in
+`requirements.txt`; they do not call an LLM endpoint.
 
-### τ-bench
+## API Configuration
 
-Install τ-bench from its official repository or package release. The code supports both the Retail and Airline domains.
+Agentic experiments use an OpenAI-compatible chat-completions endpoint. Before
+running tau-bench or ALFWorld scripts, replace the placeholder constants in the
+relevant files:
 
-### ALFWorld
+- `src/fed_causal/llm_client.py`
+- `experiments/p11_taubench_3seed.py`
+- `experiments/p12_alf_3seed_v2.py`
+- `experiments/p13_b8e_icp.py`
+- `experiments/p14_federated_3client.py`
+- `experiments/p25_airline.py`
 
-Install ALFWorld and download the required environment data following the official ALFWorld instructions.
+Example placeholders:
 
-### Synthetic SCM Tasks
+```python
+AZURE_API_KEY = "YOUR_AZURE_API_KEY"
+AZURE_API_BASE = "YOUR_AZURE_ENDPOINT"
+MODEL_NAME = "openai/gpt-5.4-mini"
+```
 
-Synthetic datasets are generated locally and do not require external downloads.
+Do not commit real credentials. The pricing constants in the experiment
+scripts are used only for run-level cost estimates.
 
 ## Quick Start
 
-Run the synthetic experiments with:
+Run the CPU-only synthetic/theory checks:
 
 ```bash
 bash scripts/reproduce.sh
 ```
 
-These experiments test causal identification, distribution shift, client heterogeneity, sample size, and planning-horizon effects.
+This driver runs:
 
-A representative τ-bench run is:
+- synthetic SCM generation;
+- confounder-shift verification;
+- ICP edge-validation verification;
+- horizon-scaling verification;
+- three-seed synthetic reproducibility;
+- Pearl-style do-calculus single-proxy check.
+
+A lightweight pipeline smoke test is also available:
+
+```bash
+python src/fed_causal/pipeline.py
+```
+
+## Benchmarks
+
+### tau-bench Retail
 
 ```bash
 python experiments/p11_taubench_3seed.py \
-  --baselines \
-    B2_GlobalSeqWM \
-    B7d_AnnotatedNoFraming_NoInt \
-    B8d_AnnotatedNoFraming \
-    B9_AnnotatedNoFramingNoControl \
-    B10_OracleCausalWM \
+  --baselines B2_GlobalSeqWM B7d_AnnotatedNoFraming_NoInt \
+              B8d_AnnotatedNoFraming B9_AnnotatedNoFramingNoControl \
+              B10_OracleCausalWM \
   --seeds 0 1 2 \
-  --log_dir runs/taubench_retail
+  --log_dir runs/p11_taubench_retail
 ```
 
-A representative ALFWorld run is:
+### tau-bench Airline
+
+```bash
+python experiments/p25_airline.py \
+  --baselines B2_GlobalSeqWM B7d_AnnotatedNoFraming_NoInt \
+              B8d_AnnotatedNoFraming B9_AnnotatedNoFramingNoControl \
+              B10_OracleCausalWM \
+  --log_dir runs/p25_airline
+```
+
+### ALFWorld
 
 ```bash
 python experiments/p12_alf_3seed_v2.py \
   --baselines B8d_AnnotatedNoFraming \
   --n_tasks 50 \
   --seed 0 \
-  --log_dir runs/alfworld
+  --log_dir runs/p12_alfworld
 ```
 
-Additional experiment scripts are provided under `experiments/` for cross-domain evaluation, ablation studies, multi-seed analysis, and synthetic causal tests.
+## Baselines
+
+| ID | Description |
+| --- | --- |
+| `B2_GlobalSeqWM` | Global sequential world model without explicit causal structure. |
+| `B7d_AnnotatedNoFraming_NoInt` | Annotated dependency model without intervention validation. |
+| `B8d_AnnotatedNoFraming` / `B8_FedCausalCompose` | Full causal world-model framing with validated dependencies. |
+| `B9_AnnotatedNoFramingNoControl` | Causal dependency information without the control clause. |
+| `B10_OracleCausalWM` | Oracle causal graph upper-bound baseline. |
+| `B11_CentralizedSeq` | Centralized full-sequence upper-bound baseline in the core library. |
 
 ## Outputs
 
-Each experiment stores task-level predictions and aggregate results in its output directory.
-
-Typical files include:
+Experiment scripts write task-level and aggregate artifacts under the selected
+`--log_dir`:
 
 ```text
-<baseline>_predictions.jsonl   # Task-level trajectories and outcomes
-summary.json                   # Aggregate success and cost statistics
+<baseline>_predictions.jsonl
+summary.json
 ```
 
-The main evaluation measures include task success rate, confidence intervals, planning errors, tool-use errors, and performance under distribution shift.
+Typical metrics include task success, transition exact match, module/event
+match rates, Wilson or bootstrap confidence intervals, token usage, and
+estimated cost.
 
-## Reproducibility
+## Reproducibility Notes
 
-Agentic LLM experiments may vary across repeated runs because hosted model endpoints and user simulators are not fully deterministic. We recommend reporting results over multiple seeds and retaining task-level trajectories for error analysis.
+Hosted LLM endpoints and simulator agents may be non-deterministic even when
+temperature is fixed. For agentic experiments, report multiple seeds and keep
+task-level traces for error analysis. Synthetic SCM experiments are
+deterministic once the random seed is fixed.
 
-Synthetic SCM experiments are deterministic when the random seed is fixed.
-
-## License
-
-This project is released under the MIT License.
-
-The repository does not redistribute τ-bench or ALFWorld data. Please obtain those resources from their official repositories.
+This repository does not redistribute tau-bench or ALFWorld data. Please
+install those benchmarks from their official sources.
 
 ## Citation
 
@@ -149,3 +287,7 @@ The repository does not redistribute τ-bench or ALFWorld data. Please obtain th
   note    = {Under review}
 }
 ```
+
+## License
+
+This project is released under the MIT License. See [LICENSE](LICENSE).
