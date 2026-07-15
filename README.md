@@ -4,10 +4,8 @@
 
 ### Federated Causal World Models for Agentic LLMs
 
-[![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](#installation)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Benchmarks](https://img.shields.io/badge/benchmarks-tau--bench%20%7C%20ALFWorld%20%7C%20SCM-purple.svg)](#benchmarks)
-[![Artifact](https://img.shields.io/badge/artifact-conference--style%20release-lightgrey.svg)](#quick-start)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.11-3776AB.svg)](requirements.txt)
 
 **Anonymous code release for the FedCausalWorld manuscript.**
 
