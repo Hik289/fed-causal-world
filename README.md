@@ -27,6 +27,12 @@
   <em>Figure 1. FedCausalWorld pipeline: local intervention sampling and edge validation feed server-side adjustment and causal rollout.</em>
 </p>
 
+## At a Glance
+
+- **Research question.** Can private clients compose a shared causal world model for tool-using agents without centralizing trajectories?
+- **Core idea.** FedCausalWorld validates local intervention-response structure and aggregates causal graph information for decentralized control.
+- **What is included.** Federated causal modules, tau-bench and ALFWorld experiments, baselines, outputs, and reproducibility notes.
+
 ## Overview
 
 Modern tool-using agents operate over modular worlds: account systems,
@@ -104,7 +110,7 @@ less reliable.
   <em>Figure 4. High-level finding: causal information helps broadly, while causal prescription depends on environment explicitness.</em>
 </p>
 
-## Repository Layout
+## Repository Structure
 
 ```text
 fedcausalworld/
