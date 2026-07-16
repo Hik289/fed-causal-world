@@ -1,17 +1,25 @@
-<div align="center">
+<h1 align="center">FedCausalWorld</h1>
 
-# FedCausalWorld
+<p align="center">
+  <strong>Federated Causal World Models for Agentic LLMs</strong>
+</p>
 
-### Federated Causal World Models for Agentic LLMs
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT license"></a>
+  <a href="requirements.txt"><img src="https://img.shields.io/badge/Python-3.11-3776AB.svg" alt="Python 3.11"></a>
+</p>
 
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.11-3776AB.svg)](requirements.txt)
+<p align="center">
+  <strong>Anonymous code release for the FedCausalWorld manuscript.</strong>
+</p>
 
-**Anonymous code release for the FedCausalWorld manuscript.**
-
-[Overview](#overview) | [Method](#method) | [Quick Start](#quick-start) | [Benchmarks](#benchmarks) | [Citation](#citation)
-
-</div>
+<p align="center">
+  <a href="#overview">Overview</a> |
+  <a href="#method">Method</a> |
+  <a href="#quick-start">Quick Start</a> |
+  <a href="#benchmarks">Benchmarks</a> |
+  <a href="#citation">Citation</a>
+</p>
 
 > **TL;DR.** FedCausalWorld studies whether multiple private clients can
 > compose a shared causal world model for tool-using LLM agents without
