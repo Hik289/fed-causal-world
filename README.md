@@ -289,6 +289,10 @@ deterministic once the random seed is fixed.
 This repository does not redistribute tau-bench or ALFWorld data. Please
 install those benchmarks from their official sources.
 
+## Reviewer Guide
+
+For a reviewer-oriented map of smoke checks, paper-scale entry points, data boundaries, and reporting metadata, see [Artifact Guide](docs/ARTIFACT.md).
+
 ## Artifact Checklist
 
 - **Code release.** Core implementations, configuration files, and reproduction entry points are versioned in this repository.
