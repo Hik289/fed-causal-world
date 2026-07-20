@@ -289,6 +289,13 @@ deterministic once the random seed is fixed.
 This repository does not redistribute tau-bench or ALFWorld data. Please
 install those benchmarks from their official sources.
 
+## Artifact Checklist
+
+- **Code release.** Core implementations, configuration files, and reproduction entry points are versioned in this repository.
+- **Reproducibility.** Start with the smoke or quick-start path before paper-scale runs; record the commit hash, Python version, backend/model identifiers, seeds, and command-line arguments.
+- **Data and credentials.** Large datasets, benchmark downloads, generated outputs, and API keys are intentionally excluded. Use the data and configuration notes above to recreate them or point to local copies.
+- **Reporting.** For paper-scale runs, keep raw run folders immutable and regenerate tables or figures from the logged artifacts with the listed analysis scripts.
+
 ## Citation
 
 ```bibtex

@@ -20,3 +20,19 @@ logs/
 *.egg-info/
 build/
 dist/
+
+# Shared research-artifact hygiene
+.AppleDouble
+._*
+.vscode/
+.idea/
+*.swp
+*~
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.env.*
+!.env.example
+wandb/
+checkpoints/
+*.tmp
