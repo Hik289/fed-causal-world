@@ -13,7 +13,7 @@ Outputs (saved as .npz under data/synthetic/<config_id>/ by engineer):
   - X_obs, A_obs, X_int, A_int, intervention_mask
   - oracle_GM, oracle_GV (with lag), mechanism_params
 
-Author: Data Scientist (Anonymous-Lab) · 2026-06-19 JST
+Maintainer: anonymous artifact authors, 2026-06-19 JST
 """
 
 from dataclasses import dataclass
