@@ -2,16 +2,24 @@
 
 Also test on a confounder-shift eval split where δ_int² should drive B2 down.
 """
-import sys, os, json, pickle, time
-sys.path.insert(0, "/home/user/fedcausalworld/experiments")
-sys.path.insert(0, "/home/user/fedcausalworld/data")
-import anchor4_sanity_v2 as v2
-import anchor4_v3 as v3
-import numpy as np
-from synthetic_scm_skeleton import simulate
 
-base = "/home/user/fedcausalworld/data/synthetic"
-out_dir = "/home/user/fedcausalworld/experiments/anchor_4_run"
+import json
+import os
+import pickle
+import sys
+import time
+
+import numpy as np
+
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, REPO_ROOT)
+sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
+from experiments import anchor4_sanity_v2 as v2
+from experiments import anchor4_v3 as v3
+from fed_causal.synthetic_scm_skeleton import simulate
+
+base = "data/synthetic"
+out_dir = "runs/anchor_4_v4"
 
 
 def gen_confounder_eval(cfg, GV, params, rng, T=1500, conf_mu=2.5):
@@ -122,7 +130,8 @@ if __name__ == "__main__":
                "elapsed_seconds": time.time()-t0,
                "per_seed":per_seed,
                "aggregate":{"B2_em":B2,"B7_em":B7,"B8_em":B8,"B10_em":B10}}
-    out_path = "/home/user/fedcausalworld/experiments/anchor_4_run/anchor4_results_v4_medium.json"
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = os.path.join(out_dir, "anchor4_results_v4_medium.json")
     with open(out_path, "w") as f:
         json.dump(summary, f, indent=2, default=str)
     print(f"saved {out_path}")

@@ -7,15 +7,25 @@ to provide robustness for paper §3 Theorem 1 verification.
 CPU only, ~10 min.
 """
 
-import argparse, json, os, sys, time
+import argparse
+import json
+import os
+import sys
+import time
+
 import numpy as np
 
-sys.path.insert(0, "/home/user/fedcausalworld/data")
-sys.path.insert(0, "/home/user/fedcausalworld/experiments")
-from synthetic_scm_skeleton import SCMConfig, simulate, generate_all_splits
-import anchor4_sanity_v2 as v2
-import anchor4_v5_icp as v5
-import anchor4_v9_b10fix as v9
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, REPO_ROOT)
+sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
+from fed_causal.synthetic_scm_skeleton import (  # noqa: E402
+    SCMConfig,
+    generate_all_splits,
+    simulate,
+)
+from experiments import anchor4_sanity_v2 as v2
+from experiments import anchor4_v5_icp as v5
+from experiments import anchor4_v9_b10fix as v9
 
 
 def gen_and_eval(K, chain_depth, alpha, gamma, gamma_A, lag_mean=0,
@@ -32,7 +42,7 @@ def gen_and_eval(K, chain_depth, alpha, gamma, gamma_A, lag_mean=0,
     obs = out["splits"]["obs"]
     rng_cs = np.random.default_rng(seed * 31 + 23)
     ev = simulate(cfg, oracle["GV_edges"], oracle["mechanism_params"],
-                  {"confounder_shift": True, "conf_mu": 2.5}, rng_cs, T=1500)
+                  {"confounder_shift": True, "conf_mu": 2.5}, rng_cs, T=T_eval)
     pred_b10 = v9.b10_predict_with_conf(ev["X"], ev["A"], ev["U_conf"],
                                          oracle, K, cfg.n_k)
     pred_b2 = v2.b2_fit_predict(obs["X"], obs["A"], ev["X"], ev["A"],
@@ -61,9 +71,12 @@ def spearman_rho(xs, ys):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", nargs="+", type=int, default=[0, 1, 2])
-    ap.add_argument("--out_path",
-                    default="/home/user/fedcausalworld/experiments/anchor_4_run/p1_synthetic_3seed_summary.json")
+    ap.add_argument("--out_dir", default="runs/p15_synthetic_3seed")
+    ap.add_argument("--out_path", default=None)
     args = ap.parse_args()
+    out_path = args.out_path or os.path.join(
+        args.out_dir, "p1_synthetic_3seed_summary.json"
+    )
 
     t0 = time.time()
     print("=== P1.5: 3-seed Synthetic G6 (γ, α, d sweep) ===")
@@ -151,10 +164,10 @@ def main():
                     "gate_pass_0.7": rho_d >= 0.7},
         "G6_n_pass": int((rho_g >= 0.7) + (rho_a >= 0.7) + (rho_d >= 0.7)),
     }
-    os.makedirs(os.path.dirname(args.out_path), exist_ok=True)
-    with open(args.out_path, "w") as f:
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    with open(out_path, "w") as f:
         json.dump(summary, f, indent=2, default=str)
-    print(f"\n[OK] saved {args.out_path}, elapsed {elapsed:.0f}s")
+    print(f"\n[OK] saved {out_path}, elapsed {elapsed:.0f}s")
     print(f"G6 verdict: ρ_γ={rho_g:+.3f}, ρ_α={rho_a:+.3f}, ρ_d={rho_d:+.3f}")
     print(f"G6 n_pass (≥0.7): {summary['G6_n_pass']}/3")
 

@@ -1,9 +1,4 @@
-"""
-llm_client.py — Azure GPT-5.4-mini client for fedcausalworld experiments.
-
-# API config (per API key policy):
-   The API key is INLINE here. DO NOT export, do NOT write to .env, do NOT
-   load via os.environ. This file MUST be listed in .gitignore.
+"""OpenAI-compatible client for FedCausalWorld experiments.
 
 This module provides a unified LLM client for the supplementary experiments.
 
@@ -22,14 +17,17 @@ Pricing assumption (gpt-5.4-mini, Azure rates as of 2026-06-19):
 """
 
 from __future__ import annotations
-import time
-import threading
-from typing import List, Dict, Any, Optional, Tuple
 
-# === API config: INLINE CREDENTIAL (this file is .gitignored) ===
-AZURE_API_KEY = "YOUR_AZURE_API_KEY"
-AZURE_ENDPOINT = "YOUR_AZURE_ENDPOINT"
-DEPLOYMENT_NAME = "gpt-5.4-mini"
+import os
+import threading
+import time
+from typing import Any
+
+API_KEY = os.environ.get("FED_CAUSAL_API_KEY") or os.environ.get("OPENAI_API_KEY")
+API_BASE_URL = os.environ.get("FED_CAUSAL_API_BASE_URL") or os.environ.get(
+    "OPENAI_BASE_URL"
+)
+DEPLOYMENT_NAME = os.environ.get("FED_CAUSAL_MODEL", "gpt-5.4-mini")
 
 # Pricing (USD per 1M tokens)
 PRICE_INPUT_PER_1M = 0.25
@@ -50,11 +48,19 @@ _counter = {
 
 
 def get_client():
-    """Return a cached OpenAI client pointing at the Azure endpoint."""
+    """Return a cached OpenAI-compatible client."""
     global _client
     if _client is None:
+        if not API_KEY:
+            raise RuntimeError(
+                "Set FED_CAUSAL_API_KEY or OPENAI_API_KEY before API-backed runs."
+            )
         from openai import OpenAI
-        _client = OpenAI(base_url=AZURE_ENDPOINT, api_key=AZURE_API_KEY)
+
+        kwargs = {"api_key": API_KEY}
+        if API_BASE_URL:
+            kwargs["base_url"] = API_BASE_URL
+        _client = OpenAI(**kwargs)
     return _client
 
 
@@ -63,13 +69,13 @@ def _estimate_cost(prompt_tokens: int, completion_tokens: int) -> float:
             + completion_tokens * PRICE_OUTPUT_PER_1M) / 1_000_000.0
 
 
-def chat(messages: List[Dict[str, str]],
+def chat(messages: list[dict[str, str]],
          max_tokens: int = 512,
          temperature: float = 0.0,
          model: str = DEPLOYMENT_NAME,
          max_retries: int = 4,
          timeout: float = 60.0,
-         **kwargs) -> Tuple[str, Dict[str, Any]]:
+         **kwargs) -> tuple[str, dict[str, Any]]:
     """
     Single chat call. Returns (text, usage).
 
@@ -146,7 +152,7 @@ def reset_counter():
             _counter[k] = 0 if isinstance(_counter[k], int) else 0.0
 
 
-def get_counter() -> Dict[str, Any]:
+def get_counter() -> dict[str, Any]:
     with _lock:
         return dict(_counter)
 

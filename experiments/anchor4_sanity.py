@@ -421,8 +421,8 @@ def run_single_seed(seed: int, base_data_dir: str, n_bins: int = 10,
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--data_dir", default="/home/user/fedcausalworld/data/synthetic")
-    ap.add_argument("--out_dir", default="/home/user/fedcausalworld/experiments/anchor_4_run")
+    ap.add_argument("--data_dir", default="data/synthetic")
+    ap.add_argument("--out_dir", default="runs/anchor_4")
     ap.add_argument("--seeds", nargs="*", type=int, default=[0, 1, 2])
     ap.add_argument("--eval_split", default="unseen_int_test")
     args = ap.parse_args()

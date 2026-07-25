@@ -176,27 +176,17 @@ The synthetic SCM experiments require only the dependencies in
 
 ## API Configuration
 
-Agentic experiments use an OpenAI-compatible chat-completions endpoint. Before
-running tau-bench or ALFWorld scripts, replace the placeholder constants in the
-relevant files:
+Agentic experiments use an OpenAI-compatible chat-completions endpoint.
+Configure credentials in the environment:
 
-- `src/fed_causal/llm_client.py`
-- `experiments/p11_taubench_3seed.py`
-- `experiments/p12_alf_3seed_v2.py`
-- `experiments/p13_b8e_icp.py`
-- `experiments/p14_federated_3client.py`
-- `experiments/p25_airline.py`
-
-Example placeholders:
-
-```python
-AZURE_API_KEY = "YOUR_AZURE_API_KEY"
-AZURE_API_BASE = "YOUR_AZURE_ENDPOINT"
-MODEL_NAME = "openai/gpt-5.4-mini"
+```bash
+export FED_CAUSAL_API_KEY="..."
+export FED_CAUSAL_API_BASE_URL="https://your-endpoint.example/v1"
+export FED_CAUSAL_MODEL="gpt-5.4-mini"
 ```
 
-Do not commit real credentials. The pricing constants in the experiment
-scripts are used only for run-level cost estimates.
+`OPENAI_API_KEY` and `OPENAI_BASE_URL` are accepted as fallbacks. Do not commit
+real credentials. Pricing constants are used only for run-level cost estimates.
 
 ## Quick Start
 

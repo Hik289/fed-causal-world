@@ -27,15 +27,25 @@ beat B2 at all γ.
 CPU only, ~3 min.
 """
 
-import argparse, json, os, sys, time, pickle
+import argparse
+import json
+import os
+import sys
+import time
+
 import numpy as np
 
-sys.path.insert(0, "/home/user/fedcausalworld/data")
-sys.path.insert(0, "/home/user/fedcausalworld/experiments")
-from synthetic_scm_skeleton import SCMConfig, simulate, generate_all_splits
-import anchor4_sanity_v2 as v2
-import anchor4_v5_icp as v5
-import anchor4_v9_b10fix as v9
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, REPO_ROOT)
+sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
+from fed_causal.synthetic_scm_skeleton import (  # noqa: E402
+    SCMConfig,
+    generate_all_splits,
+    simulate,
+)
+from experiments import anchor4_sanity_v2 as v2
+from experiments import anchor4_v5_icp as v5
+from experiments import anchor4_v9_b10fix as v9
 
 
 def fit_b8prime_control_function(X_train, A_train, oracle, K, n, m):
@@ -128,7 +138,7 @@ def gen_and_eval(K, chain_depth, alpha, gamma, gamma_A, lag_mean=0,
     obs = out["splits"]["obs"]
     rng_cs = np.random.default_rng(seed * 31 + 23)
     ev = simulate(cfg, oracle["GV_edges"], oracle["mechanism_params"],
-                  {"confounder_shift": True, "conf_mu": 2.5}, rng_cs, T=1500)
+                  {"confounder_shift": True, "conf_mu": 2.5}, rng_cs, T=T_eval)
     X_train, A_train = obs["X"], obs["A"]
     X_eval, A_eval, U_eval = ev["X"], ev["A"], ev["U_conf"]
 
@@ -150,8 +160,7 @@ def gen_and_eval(K, chain_depth, alpha, gamma, gamma_A, lag_mean=0,
     # Also B8 numerical OLS (anchor_4 baseline)
     # ICP-validated parents from rich-int
     rng_rich = np.random.default_rng(seed * 31 + 17)
-    sys.path.insert(0, "/home/user/fedcausalworld/experiments")
-    import anchor4_v6_unseen as v6
+    from experiments import anchor4_v6_unseen as v6
     rich = v6.gen_rich_int_holdout(cfg, oracle["GV_edges"],
                                     oracle["mechanism_params"], rng_rich,
                                     K - 1, T_per_module=1000)
@@ -181,9 +190,12 @@ def gen_and_eval(K, chain_depth, alpha, gamma, gamma_A, lag_mean=0,
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", nargs="+", type=int, default=[0, 1, 2])
-    ap.add_argument("--out_path",
-                    default="/home/user/fedcausalworld/experiments/anchor_4_run/p2_docalculus_synthetic_summary.json")
+    ap.add_argument("--out_dir", default="runs/p22_docalculus")
+    ap.add_argument("--out_path", default=None)
     args = ap.parse_args()
+    out_path = args.out_path or os.path.join(
+        args.out_dir, "p2_docalculus_synthetic_summary.json"
+    )
     t0 = time.time()
 
     gamma_values = [0.0, 0.25, 0.5, 0.75, 1.0]
@@ -242,10 +254,10 @@ def main():
                           "B2 (non-causal), and B10 (oracle with U_conf). "
                           "If B8' saturates oracle bound, ratio B8'/B10 ≈ 1.",
     }
-    os.makedirs(os.path.dirname(args.out_path), exist_ok=True)
-    with open(args.out_path, "w") as f:
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    with open(out_path, "w") as f:
         json.dump(summary, f, indent=2, default=str)
-    print(f"\n[OK] saved {args.out_path}, elapsed {elapsed:.0f}s")
+    print(f"\n[OK] saved {out_path}, elapsed {elapsed:.0f}s")
 
 
 if __name__ == "__main__":

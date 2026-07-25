@@ -26,10 +26,10 @@ import time
 import traceback
 from typing import Any, Dict, List
 
-AZURE_API_KEY = "YOUR_AZURE_API_KEY"
-AZURE_API_BASE = "YOUR_AZURE_ENDPOINT"
-MODEL_NAME = "openai/gpt-5.4-mini"
-DEPLOYMENT = "gpt-5.4-mini"
+AZURE_API_KEY = os.environ.get("FED_CAUSAL_API_KEY") or os.environ.get("OPENAI_API_KEY")
+AZURE_API_BASE = os.environ.get("FED_CAUSAL_API_BASE_URL") or os.environ.get("OPENAI_BASE_URL")
+MODEL_NAME = os.environ.get("FED_CAUSAL_MODEL", "openai/gpt-5.4-mini")
+DEPLOYMENT = MODEL_NAME.rsplit("/", 1)[-1]
 PRICE_INPUT_PER_1M = 0.25
 PRICE_OUTPUT_PER_1M = 2.00
 
@@ -39,8 +39,10 @@ _usage_log: List[Dict[str, Any]] = []
 
 
 def _patched_completion(*args, **kwargs):
-    kwargs["api_key"] = AZURE_API_KEY
-    kwargs["api_base"] = AZURE_API_BASE
+    if AZURE_API_KEY:
+        kwargs.setdefault("api_key", AZURE_API_KEY)
+    if AZURE_API_BASE:
+        kwargs.setdefault("api_base", AZURE_API_BASE)
     if not kwargs.get("model", "").endswith(DEPLOYMENT):
         kwargs["model"] = MODEL_NAME
     kwargs.setdefault("custom_llm_provider", "openai")
@@ -184,7 +186,7 @@ def main():
     ap.add_argument("--task_indices", type=int, nargs="*",
                     default=list(range(21)))
     ap.add_argument("--log_dir",
-                    default="/home/user/fedcausalworld/experiments/exp1_run/tau_bench_r2_b7d")
+                    default="runs/tau_bench_r2_b7d")
     args = ap.parse_args()
     os.makedirs(args.log_dir, exist_ok=True)
     all_results = {}

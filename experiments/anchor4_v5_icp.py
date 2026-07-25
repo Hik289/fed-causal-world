@@ -41,10 +41,11 @@ from typing import Dict, List, Tuple, Any
 import numpy as np
 from scipy import stats as scipy_stats
 
-sys.path.insert(0, "/home/user/fedcausalworld/data")
-sys.path.insert(0, "/home/user/fedcausalworld/experiments")
-from synthetic_scm_skeleton import SCMConfig, simulate                    # noqa: E402
-import anchor4_sanity_v2 as v2                                             # noqa: E402
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, REPO_ROOT)
+sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
+from fed_causal.synthetic_scm_skeleton import SCMConfig, simulate          # noqa: E402
+from experiments import anchor4_sanity_v2 as v2                            # noqa: E402
 
 
 # ----------------------------------------------------------------------
@@ -359,8 +360,8 @@ def aggregate(per_seed, key_path):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--data_dir", default="/home/user/fedcausalworld/data/synthetic")
-    ap.add_argument("--out_dir", default="/home/user/fedcausalworld/experiments/anchor_4_run")
+    ap.add_argument("--data_dir", default="data/synthetic")
+    ap.add_argument("--out_dir", default="runs/anchor_4_v5")
     ap.add_argument("--seeds", nargs="*", type=int, default=[0, 1, 2])
     ap.add_argument("--alpha", type=float, default=0.05)
     args = ap.parse_args()

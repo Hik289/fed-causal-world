@@ -1,14 +1,18 @@
 """Quick patch of v2: use ATE-style edge detection + lower p_verify_threshold."""
-import sys
-sys.path.insert(0, "/home/user/fedcausalworld/experiments")
-sys.path.insert(0, "/home/user/fedcausalworld/data")
-import anchor4_sanity_v2 as v2  # reuse most functions
-import numpy as np
+
 import json
 import os
 import pickle
+import sys
 import time
-from synthetic_scm_skeleton import simulate
+
+import numpy as np
+
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, REPO_ROOT)
+sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
+from experiments import anchor4_sanity_v2 as v2
+from fed_causal.synthetic_scm_skeleton import simulate
 
 def ate_step3_step4(X_train, A_train, int_mask, K, n,
                     lag_window=1, p_verify_threshold=0.30):
@@ -154,8 +158,8 @@ def run_seed_v3(seed, base_data_dir, n_bins=5):
 
 
 if __name__ == "__main__":
-    base = "/home/user/fedcausalworld/data/synthetic"
-    out_dir = "/home/user/fedcausalworld/experiments/anchor_4_run"
+    base = "data/synthetic"
+    out_dir = "runs/anchor_4_v3"
     t0 = time.time()
     per_seed = [run_seed_v3(s, base) for s in [0,1,2]]
     for r in per_seed:

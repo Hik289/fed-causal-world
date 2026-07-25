@@ -18,12 +18,26 @@ cd "$ROOT"
 
 mkdir -p data/synthetic runs
 
-# ----- 1. Generate Synthetic SCM data -----
+# ----- 1. Generate the configurations consumed by the verification scripts -----
 echo "[1/6] Generating synthetic SCM data ..."
-python src/fed_causal/synthetic_scm_skeleton.py \
-  --config_id default \
-  --n_train 1000 --n_test 500 \
-  --out_dir data/synthetic
+for seed in 0 1 2; do
+  python src/fed_causal/synthetic_scm_skeleton.py \
+    --config_id "sanity_chain_d4_seed${seed}" \
+    --K 5 --d 4 --alpha 0.8 --gamma 0.0 --sigma 0.05 \
+    --T_train 3000 --T_eval 1500 --seed "$seed" --force_chain \
+    --out_dir data/synthetic
+  python src/fed_causal/synthetic_scm_skeleton.py \
+    --config_id "medium_chain_d4_seed${seed}" \
+    --K 5 --d 4 --alpha 0.5 --gamma 0.5 --sigma 0.10 \
+    --T_train 3000 --T_eval 1500 --seed "$seed" --force_chain \
+    --out_dir data/synthetic
+  python src/fed_causal/synthetic_scm_skeleton.py \
+    --config_id "confact_chain_d4_seed${seed}" \
+    --K 5 --d 4 --alpha 0.5 --gamma 0.5 --sigma 0.10 \
+    --T_train 3000 --T_eval 1500 --seed "$seed" --force_chain \
+    --confound_action --gamma_A 2.0 \
+    --out_dir data/synthetic
+done
 
 # ----- 2. Theorem 1: anchor-4 v9 confshift -----
 echo "[2/6] Theorem 1 verification (γ-sweep, confounder shift) ..."

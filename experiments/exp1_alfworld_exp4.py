@@ -26,11 +26,11 @@ import traceback
 import yaml
 from typing import Any, Dict, List
 
-# === API CREDS (set via env vars or fill below) ===
-AZURE_API_KEY = "YOUR_AZURE_API_KEY"
-AZURE_API_BASE = "YOUR_AZURE_ENDPOINT"
-MODEL_NAME = "openai/gpt-5.4-mini"
-DEPLOYMENT = "gpt-5.4-mini"
+# API configuration is read from the environment.
+AZURE_API_KEY = os.environ.get("FED_CAUSAL_API_KEY") or os.environ.get("OPENAI_API_KEY")
+AZURE_API_BASE = os.environ.get("FED_CAUSAL_API_BASE_URL") or os.environ.get("OPENAI_BASE_URL")
+MODEL_NAME = os.environ.get("FED_CAUSAL_MODEL", "openai/gpt-5.4-mini")
+DEPLOYMENT = MODEL_NAME.rsplit("/", 1)[-1]
 PRICE_INPUT_PER_1M = 0.25
 PRICE_OUTPUT_PER_1M = 2.00
 
@@ -40,8 +40,10 @@ _usage_log: List[Dict[str, Any]] = []
 
 
 def _patched_completion(*args, **kwargs):
-    kwargs["api_key"] = AZURE_API_KEY
-    kwargs["api_base"] = AZURE_API_BASE
+    if AZURE_API_KEY:
+        kwargs.setdefault("api_key", AZURE_API_KEY)
+    if AZURE_API_BASE:
+        kwargs.setdefault("api_base", AZURE_API_BASE)
     if not kwargs.get("model", "").endswith(DEPLOYMENT):
         kwargs["model"] = MODEL_NAME
     kwargs.setdefault("custom_llm_provider", "openai")
@@ -368,7 +370,7 @@ def run_baseline(baseline_id: str, n_tasks: int, env_factory,
         # Touch heartbeat every 5 tasks to avoid 30min lapse
         if idx % 5 == 0:
             try:
-                with open("/home/user/.heartbeat_alf_exp4", "w") as pf:
+                with open("/tmp/fedcausalworld_heartbeat_alf", "w") as pf:
                     pf.write("")
             except Exception:
                 pass
@@ -411,7 +413,7 @@ def make_env_factory(config_path: str):
 def main():
     import argparse
     ap = argparse.ArgumentParser()
-    ap.add_argument("--config", default="/home/user/fedcausalworld/experiments/exp1_run/alf_config/alfred_pilot.yaml")
+    ap.add_argument("--config", default="configs/alfred_pilot.yaml")
     ap.add_argument("--baselines", nargs="+", required=True)
     ap.add_argument("--n_tasks", type=int, default=134)
     ap.add_argument("--max_steps", type=int, default=50)

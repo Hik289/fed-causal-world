@@ -35,10 +35,10 @@ from collections import Counter
 from typing import Any, Dict, List
 import numpy as np
 
-AZURE_API_KEY = "YOUR_AZURE_API_KEY"
-AZURE_API_BASE = "YOUR_AZURE_ENDPOINT"
-MODEL_NAME = "openai/gpt-5.4-mini"
-DEPLOYMENT = "gpt-5.4-mini"
+AZURE_API_KEY = os.environ.get("FED_CAUSAL_API_KEY") or os.environ.get("OPENAI_API_KEY")
+AZURE_API_BASE = os.environ.get("FED_CAUSAL_API_BASE_URL") or os.environ.get("OPENAI_BASE_URL")
+MODEL_NAME = os.environ.get("FED_CAUSAL_MODEL", "openai/gpt-5.4-mini")
+DEPLOYMENT = MODEL_NAME.rsplit("/", 1)[-1]
 PRICE_INPUT_PER_1M = 0.25
 PRICE_OUTPUT_PER_1M = 2.00
 
@@ -47,8 +47,10 @@ _orig = litellm.completion
 _usage = []
 
 def _patched(*args, **kwargs):
-    kwargs["api_key"] = AZURE_API_KEY
-    kwargs["api_base"] = AZURE_API_BASE
+    if AZURE_API_KEY:
+        kwargs.setdefault("api_key", AZURE_API_KEY)
+    if AZURE_API_BASE:
+        kwargs.setdefault("api_base", AZURE_API_BASE)
     if not kwargs.get("model", "").endswith(DEPLOYMENT):
         kwargs["model"] = MODEL_NAME
     kwargs.setdefault("custom_llm_provider", "openai")
@@ -177,8 +179,10 @@ def build_federated_b8d_prompt(domain, aggregated_edges):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--out_path",
-                    default="/home/user/fedcausalworld/experiments/anchor_4_run/p1_federated_3client_summary.json")
+    ap.add_argument(
+        "--out_path",
+        default="runs/p14_federated_3client/summary.json",
+    )
     args = ap.parse_args()
 
     t0 = time.time()

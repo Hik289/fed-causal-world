@@ -32,11 +32,12 @@ import sys
 import time
 import numpy as np
 
-sys.path.insert(0, "/home/user/fedcausalworld/data")
-sys.path.insert(0, "/home/user/fedcausalworld/experiments")
-from synthetic_scm_skeleton import SCMConfig, simulate                # noqa: E402
-import anchor4_sanity_v2 as v2                                         # noqa: E402
-import anchor4_v5_icp as v5                                            # noqa: E402
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, REPO_ROOT)
+sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
+from fed_causal.synthetic_scm_skeleton import SCMConfig, simulate      # noqa: E402
+from experiments import anchor4_sanity_v2 as v2                        # noqa: E402
+from experiments import anchor4_v5_icp as v5                           # noqa: E402
 
 
 def gen_rich_int_holdout(cfg, GV, params, rng, k_holdout: int,
@@ -138,8 +139,8 @@ def run_seed_v6(seed: int, base_data_dir: str, config_prefix: str,
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--data_dir", default="/home/user/fedcausalworld/data/synthetic")
-    ap.add_argument("--out_dir", default="/home/user/fedcausalworld/experiments/anchor_4_run")
+    ap.add_argument("--data_dir", default="data/synthetic")
+    ap.add_argument("--out_dir", default="runs/anchor_4_v6")
     ap.add_argument("--seeds", nargs="*", type=int, default=[0, 1, 2])
     args = ap.parse_args()
     os.makedirs(args.out_dir, exist_ok=True)

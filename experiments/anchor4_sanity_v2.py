@@ -37,9 +37,10 @@ from typing import Dict, List, Tuple, Any
 
 import numpy as np
 
-# Bring in the official generator's simulate() so we use the exact dynamics
-sys.path.insert(0, "/home/user/fedcausalworld/data")
-from synthetic_scm_skeleton import SCMConfig, simulate  # noqa: E402
+# Import the tracked generator so every experiment uses the same dynamics.
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
+from fed_causal.synthetic_scm_skeleton import SCMConfig, simulate  # noqa: E402
 
 
 # ----------------------------------------------------------------------
@@ -416,8 +417,8 @@ def run_seed(seed: int, base_data_dir: str, n_bins: int = 5) -> Dict[str, Any]:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--data_dir", default="/home/user/fedcausalworld/data/synthetic")
-    ap.add_argument("--out_dir", default="/home/user/fedcausalworld/experiments/anchor_4_run")
+    ap.add_argument("--data_dir", default="data/synthetic")
+    ap.add_argument("--out_dir", default="runs/anchor_4")
     ap.add_argument("--seeds", nargs="*", type=int, default=[0, 1, 2])
     ap.add_argument("--n_bins", type=int, default=5)
     args = ap.parse_args()

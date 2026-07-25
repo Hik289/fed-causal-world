@@ -17,13 +17,18 @@ import time
 from typing import Any, Dict, List
 import numpy as np
 
-sys.path.insert(0, "/home/user/fedcausalworld/data")
-sys.path.insert(0, "/home/user/fedcausalworld/experiments")
-from synthetic_scm_skeleton import SCMConfig, simulate, generate_all_splits  # noqa: E402
-import anchor4_sanity_v2 as v2                                               # noqa: E402
-import anchor4_v5_icp as v5                                                  # noqa: E402
-import anchor4_v6_unseen as v6                                               # noqa: E402
-import anchor4_v9_b10fix as v9                                               # noqa: E402
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, REPO_ROOT)
+sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
+from experiments import anchor4_sanity_v2 as v2                              # noqa: E402
+from experiments import anchor4_v5_icp as v5                                 # noqa: E402
+from experiments import anchor4_v6_unseen as v6                              # noqa: E402
+from experiments import anchor4_v9_b10fix as v9                              # noqa: E402
+from fed_causal.synthetic_scm_skeleton import (                              # noqa: E402
+    SCMConfig,
+    generate_all_splits,
+    simulate,
+)
 
 
 def gen_and_eval_v9_style(K, chain_depth, alpha, gamma, gamma_A, lag_mean=0,
@@ -42,7 +47,7 @@ def gen_and_eval_v9_style(K, chain_depth, alpha, gamma, gamma_A, lag_mean=0,
     obs = out["splits"]["obs"]
     rng_cs = np.random.default_rng(seed * 31 + 23)
     ev_cs = simulate(cfg, oracle["GV_edges"], oracle["mechanism_params"],
-                     {"confounder_shift": True, "conf_mu": 2.5}, rng_cs, T=1500)
+                     {"confounder_shift": True, "conf_mu": 2.5}, rng_cs, T=T_eval)
     X_train, A_train = obs["X"], obs["A"]
     X_eval, A_eval, U_eval = ev_cs["X"], ev_cs["A"], ev_cs["U_conf"]
 
@@ -72,8 +77,7 @@ def spearman_rho(xs, ys):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--out_dir",
-                    default="/home/user/fedcausalworld/experiments/anchor_4_run")
+    ap.add_argument("--out_dir", default="runs/exp7_g6_v2")
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
     os.makedirs(args.out_dir, exist_ok=True)

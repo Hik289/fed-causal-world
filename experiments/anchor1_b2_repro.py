@@ -28,10 +28,10 @@ import traceback
 from typing import Any, Dict, List
 
 # === API config: INLINE CREDS (NO env vars, file is .gitignored) ===
-AZURE_API_KEY = "YOUR_AZURE_API_KEY"
-AZURE_API_BASE = "YOUR_AZURE_ENDPOINT"
-MODEL_NAME = "openai/gpt-5.4-mini"   # litellm openai-compatible provider routing
-DEPLOYMENT = "gpt-5.4-mini"
+AZURE_API_KEY = os.environ.get("FED_CAUSAL_API_KEY") or os.environ.get("OPENAI_API_KEY")
+AZURE_API_BASE = os.environ.get("FED_CAUSAL_API_BASE_URL") or os.environ.get("OPENAI_BASE_URL")
+MODEL_NAME = os.environ.get("FED_CAUSAL_MODEL", "openai/gpt-5.4-mini")
+DEPLOYMENT = MODEL_NAME.rsplit("/", 1)[-1]
 
 PRICE_INPUT_PER_1M = 0.25     # USD / 1M input tokens (gpt-5.4-mini)
 PRICE_OUTPUT_PER_1M = 2.00    # USD / 1M output tokens
@@ -52,8 +52,10 @@ _usage_log: List[Dict[str, Any]] = []
 
 def _patched_completion(*args, **kwargs):
     # Force our Azure endpoint
-    kwargs["api_key"] = AZURE_API_KEY
-    kwargs["api_base"] = AZURE_API_BASE
+    if AZURE_API_KEY:
+        kwargs.setdefault("api_key", AZURE_API_KEY)
+    if AZURE_API_BASE:
+        kwargs.setdefault("api_base", AZURE_API_BASE)
     # Force the same model (tau-bench passes model="openai/gpt-5.4-mini" already
     # via our --model flag).  If a different model slips in (e.g. user-model),
     # still route to our deployment.
@@ -201,7 +203,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--task_indices", type=int, nargs="*",
                     default=[0, 1, 2, 3, 4])
-    ap.add_argument("--log_dir", default="/home/user/fedcausalworld/experiments/anchor_1_run")
+    ap.add_argument("--log_dir", default="runs/anchor_1")
     args = ap.parse_args()
     s = run_anchor_1(args.task_indices, args.log_dir)
     sys.exit(0 if s["gate_pass"] else 2)

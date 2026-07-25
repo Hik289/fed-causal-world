@@ -356,7 +356,7 @@ def main():
     parser = argparse.ArgumentParser(description="Synthetic Modular SCM generator")
     parser.add_argument("--config_id", type=str, required=True)
     parser.add_argument("--out_dir", type=str,
-                        default="/home/user/fedcausalworld/data/synthetic")
+                        default="data/synthetic")
     parser.add_argument("--K", type=int, default=6)
     parser.add_argument("--n_k", type=int, default=4)
     parser.add_argument("--m_k", type=int, default=2)
