@@ -35,11 +35,15 @@
   <em>Figure 1. FedCausalWorld pipeline: local intervention sampling and edge validation feed server-side adjustment and causal rollout.</em>
 </p>
 
-## Repository Summary
+## At A Glance
 
-- **Scope.** Can private clients compose a shared causal world model for tool-using agents without centralizing trajectories?
-- **Method.** FedCausalWorld validates local intervention-response structure and aggregates causal graph information for decentralized control.
-- **Contents.** Federated causal modules, tau-bench and ALFWorld experiments, baselines, outputs, and reproducibility notes.
+| Artifact review question | Entry point |
+| --- | --- |
+| Research question | Can private clients compose a shared causal world model for tool-using agents without centralizing trajectories? |
+| Core method | FedCausalWorld validates local intervention-response structure and aggregates causal graph information for decentralized control. |
+| Included artifacts | Federated causal modules, tau-bench and ALFWorld experiments, baselines, outputs, and reproducibility notes. |
+| Fast validation | `python src/fed_causal/pipeline.py` or `bash scripts/reproduce.sh` for CPU-only checks. |
+| Paper-scale reproduction | tau-bench, ALFWorld, synthetic, and causal-control experiment scripts under `experiments/`. |
 
 ## Overview
 
@@ -269,7 +273,7 @@ Typical metrics include task success, transition exact match, module/event
 match rates, Wilson or bootstrap confidence intervals, token usage, and
 estimated cost.
 
-## Reproducibility Notes
+## Experiment Notes
 
 Hosted LLM endpoints and simulator agents may be non-deterministic even when
 temperature is fixed. For agentic experiments, report multiple seeds and keep
