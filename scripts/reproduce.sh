@@ -1,15 +1,4 @@
 #!/usr/bin/env bash
-# reproduce.sh — One-shot driver for FedCausalWorld theoretical experiments.
-#
-# Reproduces (CPU-only, no API calls, ~10 min total):
-#   - Theorem 1 (anchor-4 v9 confshift)
-#   - Theorem 2 (anchor-4 v5 ICP F-test)
-#   - Proposition 1 (anchor-4 v10 horizon)
-#   - G6 3-seed Synthetic correlations (P1.5)
-#   - Do-calculus B8' Pearl §3.3 (P2.2)
-#
-# For the agentic experiments (τ-bench retail / airline, ALFWorld), fill
-# in API credentials in src/fed_causal/llm_client.py first; see README §2.2.
 
 set -e
 
