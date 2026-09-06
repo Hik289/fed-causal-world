@@ -303,11 +303,6 @@ def main():
         g7_agg.append(row)
         print(f"  {row['p_int']:>7.2f} {row['avg_n_int']:>10.1f} {row['avg_edge_f1']:>13.3f} {row['avg_B8d_MSE']:>13.3f} {row['avg_B8d_EM32']:>13.4f}")
 
-    # Check predictions:
-    # (a) p=0: edge_f1 ≈ 0 (no intervention evidence)
-    # (b) p=0.05: edge_f1 jumps if N >= N_min
-    # (c) p=0.25: ≥50% of full advantage
-    # (d) p>=0.50: marginal ≤ 1pp (saturation)
     print()
     print("=== G7 Theorem 2 / Saturation analysis ===")
     f1_p0 = g7_agg[0]["avg_edge_f1"]

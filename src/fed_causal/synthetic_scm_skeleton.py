@@ -53,11 +53,6 @@ class SCMConfig:
     force_chain: bool = False
     chain_depth: int = 4
     chain_side_prob: float = 0.0
-    # anchor_4_scm_fix: --confound_action makes U_conf influence BOTH X and A,
-    # creating a real backdoor X <- U_conf -> A -> X required by
-    # hypothesis.md Assumption 2. Without this, P(X[t+1]|X[t],A[t]) is
-    # identifiable from obs alone, so non-causal OLS matches oracle.
-    # Policy: A[t,k,q] ~ Bernoulli(sigmoid(logit(pi_obs) + gamma_A * (V_A_k @ U_conf[t])[q]))
     confound_action: bool = False
     gamma_A: float = 0.0     # strength of U_conf -> A coupling (0 = original behavior)
 

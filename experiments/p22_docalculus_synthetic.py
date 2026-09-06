@@ -64,12 +64,6 @@ def fit_b8prime_control_function(X_train, A_train, oracle, K, n, m):
 
     T = X_train.shape[0]
 
-    # Step 1: Compute residuals on training data
-    # X[t+1, k] = W_self_k @ X[t, k] + B_k @ A[t+1, k] + alpha * sum(...) + gamma * V_k @ U_conf[t] + noise
-    # Residual R[t, k] = X[t+1, k] - W_self_k @ X[t, k] - B_k @ A[t+1, k] - alpha * cross_term
-    # If we know W_self, B, W_cross (from oracle), we can compute residual directly
-    # In a true non-oracle setting we'd estimate these via OLS first; we use
-    # the structural equations here for cleanest demonstration.
     R = np.zeros((T - 1, K, n))
     for t in range(1, T):
         for k in range(K):
@@ -96,12 +90,6 @@ def fit_b8prime_control_function(X_train, A_train, oracle, K, n, m):
     else:
         U_hat_train = np.zeros((T - 1, d_conf))
 
-    # Step 3: Build predictor.  At test, we don't have U_conf, so we
-    # marginalize: E[X_next | X_prev, A] = M(X_prev, A) + gamma * V_k @ E[U_conf]
-    # On confshift, the test U_conf has shifted mean.  Without observing it,
-    # the best we can do is plug in the TRAINING mean of U_hat as the
-    # marginalization.  This is the "do-calculus" predictor under the
-    # *training* P(U_conf), which is the correct causal effect E[X | do(A)].
     U_train_mean = U_hat_train.mean(axis=0)
 
     def predict(X_eval, A_eval):

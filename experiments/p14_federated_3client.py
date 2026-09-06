@@ -208,11 +208,6 @@ def main():
     print(f"  Edges reported by ≥2 clients: {len(multi_client_edges)} (overlap)")
     print(f"  Edges reported by 1 client only: {len(single_client_edges)} (domain-specific)")
 
-    # Step 3: Round 2: clients run B8d with federated edges
-    # For demo, run B8d with federated prompt on each client's task subset
-    # We use τ-bench retail 21 tasks as "retail client", airline 21 of 50 as
-    # "airline client", and skip ALF (too expensive to re-run here; use
-    # existing P1.1/P1.2 data as proxy).
     print("\n=== Round 2: clients run B8d with federated edge set ===")
 
     from tau_bench.envs.retail.env import MockRetailDomainEnv
