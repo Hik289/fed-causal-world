@@ -125,10 +125,6 @@ BASELINE_HEADERS = {
         "flips property after timer)."
     ),
     "B9_AnnotatedNoFramingNoControl": (
-        # B9 = B8d minus the "anticipate downstream module effects" CONTROL
-        # suggestion. Model has the graph but no instruction to USE it for
-        # control. This tests whether causal control hint is the source of
-        # B8d's gain.
         "OPERATIONAL DEPENDENCIES across the 6 modules of the ALFWorld "
         "household (navigation, container_access, object_manipulation, "
         "appliance, object_property, task_monitor):\n"

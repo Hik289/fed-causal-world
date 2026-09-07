@@ -86,10 +86,6 @@ def chat(messages: list[dict[str, str]],
     for attempt in range(max_retries):
         try:
             t0 = time.time()
-            # Azure GPT-5.4-mini is a reasoning-style model.  We pass
-            # max_completion_tokens (per Azure spec for that family).  The
-            # openai client also accepts max_tokens as a shorthand, so we try
-            # both keys for backward compat.
             try:
                 resp = client.chat.completions.create(
                     model=model,

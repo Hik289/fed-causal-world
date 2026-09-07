@@ -74,10 +74,6 @@ def fit_b8prime_control_function(X_train, A_train, oracle, K, n, m):
                 t_src = max(0, t - 1 - lag)
                 xn += alpha * params["W_cross"][(i, j, lag)] @ np.tanh(X_train[t_src, i])
             R[t - 1, k] = X_train[t, k] - xn
-    # R[t, k] ≈ gamma * V_k @ U_conf[t] + noise
-    # Step 2: For each t, estimate U_conf[t] via least-squares regression of R onto V_k stacked
-    # R[t, k] = gamma * V_k @ U_conf[t] + ε_k, k=0..K-1
-    # Stack: [R[t, 0]; R[t, 1]; ...] = gamma * [V_0; V_1; ...] @ U_conf[t] + ε
     V_stack = np.vstack(V)  # (K*n, d_conf)
     # Least-squares solve: U_hat[t] = (gamma * V_stack)^+ @ R_stack[t]
     # = V_stack^+ @ R_stack[t] / gamma  (if gamma > 0)

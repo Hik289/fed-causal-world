@@ -37,10 +37,6 @@ PRICE_INPUT_PER_1M = 0.25     # USD / 1M input tokens (gpt-5.4-mini)
 PRICE_OUTPUT_PER_1M = 2.00    # USD / 1M output tokens
 
 
-# ---------------------------------------------------------------------------
-# Monkey-patch litellm.completion: inject api_key + api_base on every call so
-# τ-bench's ToolCallingAgent and LLMUserSimulationEnv route to Azure.
-# ---------------------------------------------------------------------------
 
 import litellm
 

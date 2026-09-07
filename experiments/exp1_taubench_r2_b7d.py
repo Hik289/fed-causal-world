@@ -87,10 +87,6 @@ ANNOTATED_EDGES_RETAIL = (
 )
 
 
-# B7d differs from B8d only in a brief tag about info source
-# (observation-only vs intervention-validated).  Same operational dependency
-# list, same B10-style framing.  Critically, drop "confounded / ambiguous /
-# causal" anchor wording that B7 main had.
 BASELINE_HEADERS_R2 = {
     "B7d_AnnotatedNoFraming_NoInt": (
         "OPERATIONAL DEPENDENCIES across the 6 modules of the retail system "

@@ -117,10 +117,6 @@ def run_dry() -> Dict[str, Any]:
         usage = bench_usage[benchmark]
         agg = aggregate(recs)
         avg_usd = usage["usd"] / max(1, usage["calls"])
-        # The full experiment task count assumes 1 baseline pass.  Per-task cost
-        # varies by baseline (B2 is cheapest; B11 ~3x context).  We project as
-        # a B2-equivalent total and apply a safety multiplier of 1.5 for the
-        # mix of B0-B11 + 6-step pipeline overhead.
         n_full = FULL_EXP_TASK_COUNT[benchmark]
         proj_b2 = avg_usd * n_full
         proj_mix = proj_b2 * 1.5

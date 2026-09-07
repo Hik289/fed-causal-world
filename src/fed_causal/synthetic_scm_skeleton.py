@@ -65,10 +65,6 @@ def build_module_graph(cfg: SCMConfig, rng: np.random.Generator) -> nx.DiGraph:
     G = nx.DiGraph()
     G.add_nodes_from(range(cfg.K))
 
-    # NEW (EDA A3 fix): --force_chain mode generates a deterministic chain
-    # 0 -> 1 -> 2 -> ... -> chain_depth, ensuring measured path depth = chain_depth.
-    # This is required for Exp6 depth-scan since random DAGs with rho=0.3 yield
-    # depth ~2 even when cfg.d=4 (see eda_report.md A3).
     if getattr(cfg, "force_chain", False):
         cd = getattr(cfg, "chain_depth", cfg.d)
         cd = max(1, min(cd, cfg.K - 1))

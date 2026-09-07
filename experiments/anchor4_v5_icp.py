@@ -205,10 +205,6 @@ def theorem2_trackers(int_mask, K) -> Dict[str, Any]:
     q_hat = np.array([int_mask[:, i].mean() for i in range(K)])
     q_pos = q_hat[q_hat > 0]
     q_min = float(q_pos.min()) if len(q_pos) else 0.0
-    # r_min: we set this to 1.0 because ICP F-test directly verifies
-    # interventional response; in the SCM continuous-state setup the
-    # "observability" rate r_j is 1.0 by definition (every X[t] is observed).
-    # We keep r_hat ≡ 1 for the analytic N_for_p95 estimate below.
     r_min = 1.0
     if q_min * r_min > 0:
         N_for_p95 = int(np.ceil(np.log(0.05) / np.log(1 - q_min * r_min)))
