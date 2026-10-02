@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+title: "When Do Causal World Models Help Modular LLM Agents"
+message: "If you use this code, please cite the paper."
+type: software
+authors:
+  - family-names: Song
+    given-names: Xinyuan
+  - family-names: Cai
+    given-names: Zekun
+license: MIT
+repository-code: "https://github.com/Hik289/fed-causal-world"
+preferred-citation:
+  type: article
+  title: "When Do Causal World Models Help Modular LLM Agents"
+  authors:
+    - family-names: Song
+      given-names: Xinyuan
+    - family-names: Cai
+      given-names: Zekun
+  journal: arXiv
+  year: 2026
+  doi: "10.48550/arXiv.2610.00012"
+  url: "https://arxiv.org/abs/2610.00012"

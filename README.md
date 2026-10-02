@@ -1,16 +1,17 @@
 <h1 align="center">FedCausalWorld</h1>
 
 <p align="center">
-  <strong>Federated Causal World Models for Agentic LLMs</strong>
+  <strong>When Do Causal World Models Help Modular LLM Agents</strong>
 </p>
 
 <p align="center">
+  <a href="https://arxiv.org/abs/2610.00012"><img src="https://img.shields.io/badge/arXiv-2610.00012-b31b1b.svg" alt="arXiv:2610.00012"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT license"></a>
   <a href="requirements.txt"><img src="https://img.shields.io/badge/Python-3.11-3776AB.svg" alt="Python 3.11"></a>
 </p>
 
 <p align="center">
-  <strong>Anonymous code release for the FedCausalWorld manuscript.</strong>
+  <strong>Xinyuan Song · Zekun Cai</strong>
 </p>
 
 <p align="center">
@@ -127,6 +128,7 @@ less reliable.
 ```text
 fedcausalworld/
 ├── README.md
+├── CITATION.cff
 ├── LICENSE
 ├── requirements.txt
 ├── fig1_pipeline_v2.png
@@ -297,11 +299,15 @@ Reproduction notes are in [docs/ARTIFACT.md](docs/ARTIFACT.md): environment file
 ## Citation
 
 ```bibtex
-@article{fedcausalworld2026,
-  title   = {FedCausalWorld: Federated Causal World Models for Agentic LLMs},
-  author  = {Anonymous},
-  year    = {2026},
-  note    = {Under review}
+@misc{song2026causalworldmodels,
+  title         = {When Do Causal World Models Help Modular {LLM} Agents},
+  author        = {Xinyuan Song and Zekun Cai},
+  year          = {2026},
+  eprint        = {2610.00012},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.AI},
+  doi           = {10.48550/arXiv.2610.00012},
+  url           = {https://arxiv.org/abs/2610.00012}
 }
 ```
 
