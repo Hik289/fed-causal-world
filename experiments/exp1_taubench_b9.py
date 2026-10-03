@@ -1,15 +1,3 @@
-"""
-exp1_taubench_b9.py — Exp4 B9 (B8d minus control hint) on τ-bench.
-
-B9 design (per specification Exp4 spec):
-  B9 = B8d - "use the dependency list to anticipate downstream effects" clause
-       (i.e. agent has dependency knowledge but no instruction to USE it for
-       control)
-
-If B9 ≈ B8d → control hint NOT the source of B8d's gain over B2.
-If B9 << B8d → control hint IS the gain source (paper §5 finding).
-"""
-
 from __future__ import annotations
 import json
 import os
@@ -80,7 +68,6 @@ ANNOTATED_EDGES_RETAIL = (
 
 BASELINE_HEADERS = {
     "B9_AnnotatedNoFramingNoControl": (
-        # B9 = B8d minus the "anticipate downstream effects" control hint
         "OPERATIONAL DEPENDENCIES across the 6 modules of the retail system "
         "(account, order, payment, inventory, shipment, refund):\n"
         + ANNOTATED_EDGES_RETAIL +

@@ -30,10 +30,10 @@
 > downstream agent planning.
 
 <p align="center">
-  <img src="fig1_pipeline_v2.png" width="92%" alt="FedCausalWorld client-server pipeline">
+  <img src="figures/fig1_integrated_framework.png" width="92%" alt="FedCausalWorld integrated framework">
 </p>
 <p align="center">
-  <em>Figure 1. FedCausalWorld pipeline: local intervention sampling and edge validation feed server-side adjustment and causal rollout.</em>
+  <em>Figure 1. Local evidence supports interface validation, modular causal composition, and optional local control.</em>
 </p>
 
 ## At A Glance
@@ -42,7 +42,7 @@
 | --- | --- |
 | Research question | Can private clients compose a shared causal world model for tool-using agents without centralizing trajectories? |
 | Core method | FedCausalWorld validates local intervention-response structure and aggregates causal graph information for decentralized control. |
-| Included artifacts | Federated causal modules, tau-bench and ALFWorld experiments, baselines, outputs, and reproducibility notes. |
+| Included artifacts | Federated causal modules, tau-bench and ALFWorld experiments, baselines, and reproducibility notes. |
 | Fast validation | `python src/fed_causal/pipeline.py` or `bash scripts/reproduce.sh` for CPU-only checks. |
 | Paper-scale reproduction | tau-bench, ALFWorld, synthetic, and causal-control experiment scripts under `experiments/`. |
 
@@ -79,10 +79,10 @@ estimate local causal modules and intervention-response edges; the server
 aggregates stable interface structure rather than raw data or model weights.
 
 <p align="center">
-  <img src="fig2_federated_loop_v2.png" width="78%" alt="Federated causal loop">
+  <img src="figures/fig2_composition_control.png" width="92%" alt="Causal composition and optional local control">
 </p>
 <p align="center">
-  <em>Figure 2. Federated causal loop across modular clients and an interface graph server.</em>
+  <em>Figure 2. Validated interfaces compose local mechanisms for downstream predictions; optional local control checks prerequisites, gates actions, and verifies residuals.</em>
 </p>
 
 The core implementation in `src/fed_causal/pipeline.py` follows six steps:
@@ -109,20 +109,6 @@ explicit arguments, causal control can improve downstream decisions; in text
 environments where causal state is implicit, the same control signal can be
 less reliable.
 
-<p align="center">
-  <img src="fig3_causal_control_v2.png" width="92%" alt="Causal control in tau-bench and ALFWorld">
-</p>
-<p align="center">
-  <em>Figure 3. Causal graph information and causal control behave differently in explicit tool environments and implicit text environments.</em>
-</p>
-
-<p align="center">
-  <img src="fig4_intuition_v2.png" width="92%" alt="Causal information helps everywhere while causal prescription depends on environment explicitness">
-</p>
-<p align="center">
-  <em>Figure 4. High-level finding: causal information helps broadly, while causal prescription depends on environment explicitness.</em>
-</p>
-
 ## Repository Structure
 
 ```text
@@ -131,30 +117,31 @@ fedcausalworld/
 ├── CITATION.cff
 ├── LICENSE
 ├── requirements.txt
-├── fig1_pipeline_v2.png
-├── fig2_federated_loop_v2.png
-├── fig3_causal_control_v2.png
-├── fig4_intuition_v2.png
+├── figures/
+│   ├── fig1_integrated_framework.png
+│   ├── fig1_integrated_framework.pdf
+│   ├── fig2_composition_control.png
+│   └── fig2_composition_control.pdf
 ├── src/fed_causal/
-│   ├── synthetic_scm_skeleton.py      # Synthetic SCM generator
-│   ├── pipeline.py                    # Six-step FedCausalCompose pipeline
-│   ├── event_traces.py                # Event-trace utilities
-│   ├── metrics.py                     # Task metrics and CIs
-│   ├── llm_client.py                  # OpenAI-compatible chat wrapper
-│   └── baselines/                     # B0-B11 baseline prompts/models
+│   ├── synthetic_scm_skeleton.py
+│   ├── pipeline.py
+│   ├── event_traces.py
+│   ├── metrics.py
+│   ├── llm_client.py
+│   └── baselines/
 ├── experiments/
-│   ├── anchor4_v5_icp.py              # ICP edge-validation check
-│   ├── anchor4_v9_b10fix.py           # Confounder-shift oracle check
-│   ├── anchor4_v10_horizon.py         # Horizon scaling check
-│   ├── p11_taubench_3seed.py          # tau-bench Retail multi-seed run
-│   ├── p12_alf_3seed_v2.py            # ALFWorld multi-seed run
-│   ├── p13_b8e_icp.py                 # ICP-validated framing test
-│   ├── p14_federated_3client.py       # Federated three-client experiment
-│   ├── p15_synthetic_3seed.py         # Synthetic three-seed audit
-│   ├── p22_docalculus_synthetic.py    # Pearl-style do-calculus check
-│   └── p25_airline.py                 # tau-bench Airline validation
+│   ├── anchor4_v5_icp.py
+│   ├── anchor4_v9_b10fix.py
+│   ├── anchor4_v10_horizon.py
+│   ├── p11_taubench_3seed.py
+│   ├── p12_alf_3seed_v2.py
+│   ├── p13_b8e_icp.py
+│   ├── p14_federated_3client.py
+│   ├── p15_synthetic_3seed.py
+│   ├── p22_docalculus_synthetic.py
+│   └── p25_airline.py
 └── scripts/
-    └── reproduce.sh                   # CPU-only synthetic/theory driver
+    └── reproduce.sh
 ```
 
 ## Installation
@@ -170,12 +157,11 @@ pip install -r requirements.txt
 Optional benchmark packages:
 
 ```bash
-# tau-bench
 pip install tau-bench
-
-# ALFWorld: follow the official setup and download the valid_unseen data
-# https://github.com/alfworld/alfworld
 ```
+
+For ALFWorld, follow the [official setup](https://github.com/alfworld/alfworld)
+and download the `valid_unseen` data.
 
 The synthetic SCM experiments require only the dependencies in
 `requirements.txt`; they do not call an LLM endpoint.

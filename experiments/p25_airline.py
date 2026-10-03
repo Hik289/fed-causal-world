@@ -1,10 +1,3 @@
-"""
-P2.5: τ-bench airline cross-validation.
-
-5 baselines × 21 of 50 airline tasks × 1 seed.
-Cross-domain robustness: does B8d advantage hold in airline (vs retail)?
-"""
-
 import argparse, json, os, sys, time, traceback
 from typing import Any, Dict, List
 import numpy as np
@@ -57,9 +50,6 @@ def _patched_completion(*args, **kwargs):
 litellm.completion = _patched_completion
 
 
-# Airline-domain modularization (airline schema)
-# Per modularization_spec.md §1.7: airline = account + reservation/itinerary +
-# payment + seat_availability + boarding_pass/checkin + cancel_eligibility
 ANNOTATED_EDGES_AIRLINE = (
     "account→reservation (authentication gates create_reservation), "
     "reservation→payment (reservation_placed triggers authorize_payment), "

@@ -1,35 +1,3 @@
-"""
-anchor4_v7_rollout.py — V6 ICP + UNSEEN-INT eval + MULTI-STEP ROLLOUT.
-
-Diagnostic insight from V6:
-  - At γ=0.5, my chain SCM has A ⊥ U_conf, so there is NO backdoor path through
-    A.  Single-step P(X[t+1] | X[t], A[t]) is identifiable from obs alone, and
-    B2's full-rank K-module OLS approximates B10 to within 1.5% MSE.
-  - Theorem 1's δ_int² bound bites in TWO regimes: (a) backdoor confounder
-    through A, (b) multi-step rollout where error compounds per Proposition 1
-    (insight.md eq:multiplicative-error).
-
-V7 chooses path (b): multi-step rollout error.  For depth-4 chain:
-  - 1-step error compounds to ~ε(1-(1-δ)^d) over d steps per Proposition 1
-  - With wrong/spurious parents in B8 / over-fit B2, the error inflation differs
-
-Setup:
-  - eval = unseen-int (do(A_{K-1}=*) on the chain TAIL — propagates BACKWARDS
-    is impossible in a forward chain, so we use do(A_0=*) on the HEAD to drive
-    the chain through 4 hops).  ⇒ better choice: do(A_0=a*) on root, predict
-    X[t+k] for k ∈ {1, 3, 5, 10}.
-  - Rollout: predict X[t+k, k_target] iteratively using the model
-    p̂(X[t+1] | X̂[t]).
-  - Primary metric: 5-step MSE ratio B8/B2 and B8/B10; +5-step EM_32bin
-  - Gate criterion (unchanged): B8 ≥ B10 - 3pp AND B8 ≥ B2 + 10pp on the
-    PRIMARY metric (chosen here as 5-step EM_32bin)
-
-Implementation:
-  - All four predictors (B10/B2/B7/B8) already fitted with single-step OLS;
-    we just iterate the prediction for k steps.
-  - For the rollout, we feed back the predicted X[t+1] as the new X[t].
-"""
-
 from __future__ import annotations
 import argparse
 import json
@@ -42,23 +10,17 @@ import numpy as np
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO_ROOT)
 sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
-from experiments import anchor4_sanity_v2 as v2                              # noqa: E402
-from experiments import anchor4_v5_icp as v5                                 # noqa: E402
-from experiments import anchor4_v6_unseen as v6                              # noqa: E402
-from fed_causal.synthetic_scm_skeleton import SCMConfig, simulate             # noqa: E402
+from experiments import anchor4_sanity_v2 as v2
+from experiments import anchor4_v5_icp as v5
+from experiments import anchor4_v6_unseen as v6
+from fed_causal.synthetic_scm_skeleton import SCMConfig, simulate
 
 
 def rollout_b10(X0: np.ndarray, A_seq: np.ndarray, oracle, K, n, steps: int) -> np.ndarray:
-    """Iterate B10's structural eqs starting from X0 with given action sequence.
-
-    X0: (K, n), A_seq: (steps, K, m). Returns X_traj (steps+1, K, n).
-    """
     params = oracle["mechanism_params"]
     cfg = oracle["config"]
     alpha = cfg["alpha"]
     GV = oracle["GV_edges"]
-    # We need history to handle lag, so we use the WHOLE eval prefix at each
-    # step.  Pad with zeros for lag history (lag_mean is typically 0/1).
     L = max(1, 2 * cfg.get("lag_mean", 1))
     X = np.zeros((steps + L + 1, K, n))
     X[L] = X0
@@ -75,7 +37,6 @@ def rollout_b10(X0: np.ndarray, A_seq: np.ndarray, oracle, K, n, steps: int) -> 
 
 def rollout_b2(X0: np.ndarray, A_seq: np.ndarray, W_full: np.ndarray,
                K: int, n: int, m: int, steps: int) -> np.ndarray:
-    """B2 rollout: X[t+1] = W_full @ [X[t]_flat, A[t]_flat, 1]."""
     X = np.zeros((steps + 1, K, n))
     X[0] = X0
     for t in range(steps):
@@ -88,12 +49,9 @@ def rollout_b2(X0: np.ndarray, A_seq: np.ndarray, W_full: np.ndarray,
 
 def rollout_per_module(X0: np.ndarray, A_seq: np.ndarray, coefs, parents,
                        K: int, n: int, m: int, steps: int, lag: int = 1) -> np.ndarray:
-    """Iterate per-module ridge OLS predictor (for B7 / B8)."""
     L = max(1, lag + 1)
     X = np.zeros((steps + L, K, n))
     X[L - 1] = X0
-    # Need X[t-1-lag, i] for parent terms; with lag=1 we need X[t-2, i].
-    # Pad earlier history with X0 for simplicity.
     for t in range(L - 1):
         X[t] = X0
     for t in range(L, L + steps):
@@ -108,7 +66,6 @@ def rollout_per_module(X0: np.ndarray, A_seq: np.ndarray, coefs, parents,
     return X[L - 1:]
 
 
-# Pull a B2 fit that returns W in usable form for rollout
 def b2_fit(X_train, A_train, K, n, m, ridge=1e-3):
     T = X_train.shape[0]
     Xt = X_train[:-1].reshape(T - 1, K * n)
@@ -117,18 +74,13 @@ def b2_fit(X_train, A_train, K, n, m, ridge=1e-3):
     Phi = np.concatenate([Xt, At, np.ones((T - 1, 1))], axis=1)
     A_mat = Phi.T @ Phi + ridge * np.eye(Phi.shape[1])
     B_mat = Phi.T @ Y
-    W = np.linalg.solve(A_mat, B_mat).T  # (K*n, K*n + K*m + 1)
+    W = np.linalg.solve(A_mat, B_mat).T
     return W
 
 
 def eval_rollout(X_eval, A_eval, X_train, predict_fn, name, horizons=(1, 3, 5, 10)):
-    """For each starting timestep, roll out predict_fn for max(horizons) steps.
-
-    Returns dict: {f"em_{nb}bin_h{k}": ..., f"mse_h{k}": ...}
-    """
     T = X_eval.shape[0]
     max_h = max(horizons)
-    # Sample 200 starting timesteps uniformly
     rng = np.random.default_rng(0)
     starts = rng.choice(np.arange(0, T - max_h), size=min(200, T - max_h), replace=False)
 
@@ -136,7 +88,7 @@ def eval_rollout(X_eval, A_eval, X_train, predict_fn, name, horizons=(1, 3, 5, 1
     pred_h = {h: [] for h in horizons}
     true_h = {h: [] for h in horizons}
     for t0 in starts:
-        X_traj = predict_fn(X_eval[t0], A_eval[t0:t0 + max_h])  # (max_h+1, K, n)
+        X_traj = predict_fn(X_eval[t0], A_eval[t0:t0 + max_h])
         for h in horizons:
             pred_h[h].append(X_traj[h])
             true_h[h].append(X_eval[t0 + h])
@@ -146,8 +98,6 @@ def eval_rollout(X_eval, A_eval, X_train, predict_fn, name, horizons=(1, 3, 5, 1
     for h in horizons:
         P = np.stack(pred_h[h], axis=0)
         T_ = np.stack(true_h[h], axis=0)
-        # Reshape to (n_samples, K, n) → fit_bin_edges-compatible
-        # We use the same bin edges fitted on X_train above.
         mse = float(((P - T_) ** 2).sum(axis=2).mean())
         metrics[f"mse_h{h}"] = mse
         for nb in (5, 20, 32):
@@ -173,7 +123,6 @@ def run_seed_v7(seed: int, base_data_dir: str, config_prefix: str,
                                    oracle["mechanism_params"], rng,
                                    k_holdout, T_per_module=1000)
     rng2 = np.random.default_rng(seed * 31 + 19)
-    # Eval = chain HEAD intervention (drives propagation forward through chain)
     ev_spec_rng = np.random.default_rng(seed * 31 + 23)
     ev = simulate(cfg, oracle["GV_edges"], oracle["mechanism_params"],
                   {"do_module": 0, "do_value": np.ones(cfg.m_k), "rate": 0.40},
@@ -182,7 +131,6 @@ def run_seed_v7(seed: int, base_data_dir: str, config_prefix: str,
     X_train, A_train = obs["X"], obs["A"]
     X_eval, A_eval = ev["X"], ev["A"]
 
-    # --- Fit models ---
     W_b2 = b2_fit(X_train, A_train, K, n, m)
 
     cand_obs = v2.b7_candidate_edges(X_train, K, threshold=0.10)
@@ -198,7 +146,6 @@ def run_seed_v7(seed: int, base_data_dir: str, config_prefix: str,
         parents_b8[j].append(i)
     coefs_b8 = v2.fit_per_module_ridge(X_train, A_train, parents_b8, lag=1)
 
-    # --- Rollout predictors ---
     def pred_b10(X0, A_seq):
         return rollout_b10(X0, A_seq, oracle, K, n, steps=A_seq.shape[0])
 
@@ -281,7 +228,6 @@ def main():
                 agg[name][key_mse] = float(np.mean([s["metrics"][name][key_mse]
                                                      for s in per_seed]))
         edge_f1 = float(np.mean([s["edge_f1"] for s in per_seed]))
-        # Pick best horizon (largest separator) for primary gate
         best_h = None
         best_diff = -1.0
         for hor in (1, 3, 5, 10):

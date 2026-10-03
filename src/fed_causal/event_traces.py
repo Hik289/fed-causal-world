@@ -1,30 +1,3 @@
-"""
-event_traces.py — Synthesize realistic modular event traces for the 3 main
-benchmarks, used by the dry-run cost calibrator (run_dry.py).
-
-This module produces small but representative task pools by sampling from the
-modularization_spec ground-truth edge tables.  Each task = a sequence of events
-that respects:
-  - module-level topological order (account -> order -> ... etc.)
-  - a small set of cross-module edges (drawn from the ground-truth E_M*)
-  - 1 "next-event prediction" target per task (the last observed event is held
-    out and asked to be predicted from the prefix)
-
-Why a synthetic harness for the dry-run?
-  - τ-bench / ALFWorld / AndroidWorld raw download + emulator setup takes
-    several hours; the user's deadline is "measure cost-per-task NOW".
-  - The CALIBRATION ITEM is the LLM's per-task input/output token usage, which
-    is dominated by the prompt template + event-history size, NOT by the
-    benchmark's behavioral nuance.
-  - Once cost is known, the real benchmark downloads/installs happen in the
-    RUNNING phase (user's separate dispatch).
-
-Event-history sizes are tuned to match EDA estimates:
-  - τ-bench:        ~12 events / task (eda_report.md §1.2)
-  - ALFWorld:       ~20 events / task (eda_report.md §2.2)
-  - AndroidWorld:   ~25 events / task (eda_report.md §3.2.1)
-"""
-
 from __future__ import annotations
 import random
 from dataclasses import dataclass, asdict
@@ -32,9 +5,6 @@ from typing import List, Dict, Any
 from pipeline import Event
 
 
-# ------------------------------------------------------------------
-# τ-bench Modular (6 modules, 14 ground-truth edges per spec §1.3)
-# ------------------------------------------------------------------
 TAU_BENCH_SPEC = {
     "account":   {"X_vars": ["auth_status", "account_tier", "email_verified", "address_on_file"],
                   "A_vars": ["authenticate_user", "verify_zip", "update_address"],
@@ -62,7 +32,6 @@ TAU_BENCH_SPEC = {
                   "I_in": ["shipment_completed", "payment_refunded"]},
 }
 
-# A representative subset of ground-truth edges (modularization_spec §1.3)
 TAU_BENCH_TEMPLATE = [
     ("account",   "account_authenticated", "order"),
     ("order",     "order_placed",          "payment"),
@@ -78,9 +47,6 @@ TAU_BENCH_TEMPLATE = [
     ("order",     "order_cancelled",       "inventory"),
 ]
 
-# ------------------------------------------------------------------
-# ALFWorld Modular (6 modules, 10 ground-truth edges per spec §2.3)
-# ------------------------------------------------------------------
 ALFWORLD_SPEC = {
     "navigation":         {"X_vars": ["agent_loc", "agent_facing"],
                            "A_vars": ["goto", "look"],
@@ -117,9 +83,6 @@ ALFWORLD_TEMPLATE = [
     ("object_manipulation", "object_placed",           "task_monitor"),
 ]
 
-# ------------------------------------------------------------------
-# AndroidWorld Modular (6 modules, 14 ground-truth edges per spec §3.3)
-# ------------------------------------------------------------------
 ANDROIDWORLD_SPEC = {
     "permissions_settings": {"X_vars": ["permission_granted", "airplane_mode", "wifi_connected"],
                              "A_vars": ["grant_permission", "revoke_permission", "toggle_airplane"],
@@ -162,7 +125,7 @@ ANDROIDWORLD_TEMPLATE = [
 
 
 BENCHMARKS = {
-    "tau_bench":    (TAU_BENCH_SPEC,    TAU_BENCH_TEMPLATE,    12),  # events/task
+    "tau_bench":    (TAU_BENCH_SPEC,    TAU_BENCH_TEMPLATE,    12),
     "alfworld":     (ALFWORLD_SPEC,     ALFWORLD_TEMPLATE,     20),
     "androidworld": (ANDROIDWORLD_SPEC, ANDROIDWORLD_TEMPLATE, 25),
 }
@@ -172,9 +135,9 @@ BENCHMARKS = {
 class Task:
     task_id: str
     benchmark: str
-    events: List[Event]            # prefix events (observed)
-    target_event: Event            # held-out next-event
-    ground_truth_edges: List[tuple] # for downstream Edge-F1 if needed
+    events: List[Event]
+    target_event: Event
+    ground_truth_edges: List[tuple]
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -195,12 +158,9 @@ def synth_task(benchmark: str, task_idx: int, seed: int = 0) -> Task:
     rng = random.Random(seed * 1000 + task_idx)
     events: List[Event] = []
     t = 0
-    # Walk through the template to build a realistic event chain;
-    # sprinkle interventions on ~30% of source-module events
-    # (matches eda_report §1.2.1: q_i ~ 0.6 for high-coverage modules / 0.2 for rare).
     for round_idx in range((target_events // max(len(template), 1)) + 1):
         for (src_mod, src_evt, tgt_mod) in template:
-            tgt_evt = src_evt  # incoming carries same name in our spec
+            tgt_evt = src_evt
             intervention = _sample_intervention_id(rng) if rng.random() < 0.30 else None
             events.append(Event(src_mod, src_evt, t, payload={"round": round_idx},
                                 intervention_id=intervention))
@@ -212,7 +172,6 @@ def synth_task(benchmark: str, task_idx: int, seed: int = 0) -> Task:
         if len(events) >= target_events + 1:
             break
 
-    # Last event is target; prefix is observed
     target = events[-1]
     prefix = events[:-1]
     gt_edges = [(s, se, t_, se) for (s, se, t_) in template]

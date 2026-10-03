@@ -1,32 +1,3 @@
-"""
-P2.2: do-calculus back-door adjustment for FCC on Synthetic SCM.
-
-This is the implementation that should SATURATE Theorem 3's upper bound — the
-key piece missing in our numerical OLS B8 (which fails because U_conf
-contaminates both X and A through the confound_action mechanism).
-
-Approach: control-function / proxy-variable method (Imbens-Newey 2009;
-Miao et al. 2018) — we estimate U_conf via residualization:
-
-  Step 1: Fit M(X_prev, A) = X_next using OLS on observational data
-          → residuals R = X_next - M(X_prev, A) capture U_conf-driven variation
-  Step 2: Estimate U_hat = posterior mean of U_conf given residuals,
-          using the known V_k loading (per Theorem 3 architecture)
-  Step 3: At test, predict X_next using M(X_prev, A) + correction term that
-          uses estimated U_hat from the residual model
-
-For confound_action SCM specifically:
-  - U_conf is generated as N(0, I) at training and N(mu_shift, I) at confshift
-  - V_k @ U_conf appears linearly in X_{k,t+1}
-  - Therefore X_{t+1} - W_self·X_t - B·A - alpha·W_cross·tanh(X) = gamma * V_k @ U_conf + U_k_noise
-  - The residual can be projected onto V_k to recover U_conf up to the noise
-
-This gives B8' = "FCC with control function adjustment" predictor that should
-beat B2 at all γ.
-
-CPU only, ~3 min.
-"""
-
 import argparse
 import json
 import os
@@ -38,7 +9,7 @@ import numpy as np
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO_ROOT)
 sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
-from fed_causal.synthetic_scm_skeleton import (  # noqa: E402
+from fed_causal.synthetic_scm_skeleton import (
     SCMConfig,
     generate_all_splits,
     simulate,
@@ -49,17 +20,12 @@ from experiments import anchor4_v9_b10fix as v9
 
 
 def fit_b8prime_control_function(X_train, A_train, oracle, K, n, m):
-    """Fit B8' (do-calculus FCC) on training data.
-
-    Returns a predict_fn that takes (X_eval, A_eval) → X_pred at evaluation time.
-    Uses control-function approach: estimate U_conf via residualization.
-    """
     params = oracle["mechanism_params"]
     cfg = oracle["config"]
     alpha = cfg["alpha"]
     gamma = cfg["gamma"]
     GV = oracle["GV_edges"]
-    V = params["V"]  # confounder loading matrices V_k per module
+    V = params["V"]
     d_conf = cfg["d_conf"]
 
     T = X_train.shape[0]
@@ -74,9 +40,7 @@ def fit_b8prime_control_function(X_train, A_train, oracle, K, n, m):
                 t_src = max(0, t - 1 - lag)
                 xn += alpha * params["W_cross"][(i, j, lag)] @ np.tanh(X_train[t_src, i])
             R[t - 1, k] = X_train[t, k] - xn
-    V_stack = np.vstack(V)  # (K*n, d_conf)
-    # Least-squares solve: U_hat[t] = (gamma * V_stack)^+ @ R_stack[t]
-    # = V_stack^+ @ R_stack[t] / gamma  (if gamma > 0)
+    V_stack = np.vstack(V)
     if gamma > 1e-9:
         V_pinv = np.linalg.pinv(V_stack)
         U_hat_train = np.zeros((T - 1, d_conf))
@@ -100,7 +64,6 @@ def fit_b8prime_control_function(X_train, A_train, oracle, K, n, m):
                         continue
                     t_src = max(0, t - 1 - lag)
                     xn += alpha * params["W_cross"][(i, j, lag)] @ np.tanh(X_eval[t_src, i])
-                # Use training mean of U_hat as marginalization
                 xn += gamma * V[k] @ U_train_mean
                 pred[t, k] = xn
         return pred
@@ -126,23 +89,18 @@ def gen_and_eval(K, chain_depth, alpha, gamma, gamma_A, lag_mean=0,
     X_train, A_train = obs["X"], obs["A"]
     X_eval, A_eval, U_eval = ev["X"], ev["A"], ev["U_conf"]
 
-    # B2: K-block joint OLS
     pred_b2 = v2.b2_fit_predict(X_train, A_train, X_eval, A_eval, K, cfg.n_k, cfg.m_k)
     b2_mse = v5.cont_mse(pred_b2, X_eval)
 
-    # B10 oracle (with U_conf)
     pred_b10 = v9.b10_predict_with_conf(X_eval, A_eval, U_eval,
                                          oracle, K, cfg.n_k)
     b10_mse = v5.cont_mse(pred_b10, X_eval)
 
-    # B8' do-calculus with control function
     predict_b8p, _, U_mean = fit_b8prime_control_function(X_train, A_train,
                                                           oracle, K, cfg.n_k, cfg.m_k)
     pred_b8p = predict_b8p(X_eval, A_eval)
     b8p_mse = v5.cont_mse(pred_b8p, X_eval)
 
-    # Also B8 numerical OLS (anchor_4 baseline)
-    # ICP-validated parents from rich-int
     rng_rich = np.random.default_rng(seed * 31 + 17)
     from experiments import anchor4_v6_unseen as v6
     rich = v6.gen_rich_int_holdout(cfg, oracle["GV_edges"],
@@ -196,7 +154,6 @@ def main():
             print(f"  γ={g}: B2_MSE={r['B2_MSE']}, B8_OLS={r['B8_OLS_MSE']}, "
                   f"B8'_DoCalc={r['B8prime_DoCalc_MSE']}, B10_oracle={r['B10_oracle_MSE']}")
 
-    # Aggregate
     print("\n=== Aggregate (mean across seeds) ===")
     print(f"  gamma  B2_MSE     B8_OLS     B8DoCalc   B10_oracle  d(B2-B8p)  d(B2-B10)")
     agg = []
@@ -215,8 +172,6 @@ def main():
                     "delta_B2_minus_B10": round(d_b2_b10, 4)})
         print(f"{g:>5.2f} {b2:>10.4f} {b8:>10.4f} {b8p:>10.4f} {b10:>11.4f} {d_b2_b8p:>+11.4f} {d_b2_b10:>+11.4f}")
 
-    # Check Theorem 3 saturation
-    # If B8' is do-calc-correct, B8' should match B10 to within structural-noise floor
     print("\n=== Theorem 3 saturation check ===")
     for i, g in enumerate(gamma_values):
         b8p = agg[i]["B8prime_DoCalc_MSE"]

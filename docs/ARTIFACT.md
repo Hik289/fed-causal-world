@@ -43,10 +43,8 @@ Main tracked entry points for paper-scale or benchmark-scale runs:
 
 ## Figure Assets
 
-- `fig1_pipeline_v2.png`
-- `fig2_federated_loop_v2.png`
-- `fig3_causal_control_v2.png`
-- `fig4_intuition_v2.png`
+- Figure 1: integrated framework ([PNG](../figures/fig1_integrated_framework.png), [PDF](../figures/fig1_integrated_framework.pdf)).
+- Figure 2: causal composition and optional local control ([PNG](../figures/fig2_composition_control.png), [PDF](../figures/fig2_composition_control.pdf)).
 
 ## Data And Outputs
 

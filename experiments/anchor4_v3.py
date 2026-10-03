@@ -1,5 +1,3 @@
-"""Quick patch of v2: use ATE-style edge detection + lower p_verify_threshold."""
-
 import json
 import os
 import pickle
@@ -16,13 +14,11 @@ from fed_causal.synthetic_scm_skeleton import simulate
 
 def ate_step3_step4(X_train, A_train, int_mask, K, n,
                     lag_window=1, p_verify_threshold=0.30):
-    """ATE-style: edge (i->j) detected if E[dX[t,j] | do(i,t)] >> E[dX[t,j] | no do]"""
     T = X_train.shape[0]
-    dX = np.linalg.norm(X_train[1:] - X_train[:-1], axis=2)   # (T-1, K)
+    dX = np.linalg.norm(X_train[1:] - X_train[:-1], axis=2)
 
     q_hat = np.array([int_mask[:, i].mean() for i in range(K)])
 
-    # For each (i, j): mean dX[t, j] given int_mask[t, i] vs not
     ate = np.zeros((K, K))
     for i in range(K):
         idx_int = (int_mask[:T-1, i] == 1)
@@ -35,14 +31,12 @@ def ate_step3_step4(X_train, A_train, int_mask, K, n,
             m_no = dX[idx_no, j].mean()
             ate[i, j] = m_int - m_no
 
-    # Standardize: declare edge if ate[i,j] > 1 std of dX_no
     sd = dX[(int_mask[:T-1].sum(axis=1) == 0)].std(axis=0)
     N_ij = np.zeros((K, K), dtype=int)
     r_pot = np.zeros(K, dtype=int)
     r_obs = np.zeros(K, dtype=int)
-    # Now re-count N_ij at the per-event level using ate-based threshold per j
     for j in range(K):
-        thresh_j = ate[:, j].max() * 0.5  # half the strongest ATE for j
+        thresh_j = ate[:, j].max() * 0.5
         for t in range(T - 1):
             for i in range(K):
                 if i == j or int_mask[t, i] == 0: continue
@@ -62,9 +56,6 @@ def ate_step3_step4(X_train, A_train, int_mask, K, n,
             p_ij = q_hat[i] * r_hat[j]
             p_verify[i, j] = 1.0 - (1.0 - p_ij) ** max(int(N_ij[i, j]), 0)
 
-    # Direct-edge filter: validated iff ATE[i,j] is in top-2 among ate[:, j]
-    # (chain depth=4 → each module has at most 1 direct parent + maybe a side
-    # edge from confounder, so top-1 is the right choice)
     validated = []
     for j in range(K):
         if ate[:, j].max() <= 0: continue

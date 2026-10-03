@@ -1,14 +1,3 @@
-"""
-anchor4_v10_horizon.py — rollout horizon scan on V9 SCM (confound_action).
-
-Combines V7 rollout logic with V9 SCM (full Assumption 2). Tests Proposition 1
-on intervention-confounded SCM where Theorem 1's δ_int² > 0 actually bites.
-
-Per specification Exp2 G3: Δ(h) monotone, Δ_10 ≥ +7.5pp.
-
-CPU only, no LLM. $0 cost. ~10 min wall.
-"""
-
 from __future__ import annotations
 import argparse
 import json
@@ -21,15 +10,14 @@ import numpy as np
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO_ROOT)
 sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
-from fed_causal.synthetic_scm_skeleton import simulate                # noqa: E402
-from experiments import anchor4_sanity_v2 as v2                       # noqa: E402
-from experiments import anchor4_v5_icp as v5                          # noqa: E402
-from experiments import anchor4_v6_unseen as v6                       # noqa: E402
-from experiments import anchor4_v9_b10fix as v9                       # noqa: E402
+from fed_causal.synthetic_scm_skeleton import simulate
+from experiments import anchor4_sanity_v2 as v2
+from experiments import anchor4_v5_icp as v5
+from experiments import anchor4_v6_unseen as v6
+from experiments import anchor4_v9_b10fix as v9
 
 
 def rollout_b10_with_conf(X0, A_seq, U_seq, oracle, K, n, steps):
-    """B10 rollout using full Assumption 2 (X[t-1], A[t], U_conf[t])."""
     params = oracle["mechanism_params"]
     cfg = oracle["config"]
     alpha = cfg["alpha"]; gamma = cfg["gamma"]
@@ -49,7 +37,6 @@ def rollout_b10_with_conf(X0, A_seq, U_seq, oracle, K, n, steps):
 
 
 def rollout_b2(X0, A_seq, W_full, K, n, m, steps):
-    """B2 rollout: K-block joint OLS, no U_conf."""
     X = np.zeros((steps + 1, K, n))
     X[0] = X0
     for t in range(steps):
@@ -96,7 +83,6 @@ def eval_rollout(X_eval, A_eval, U_eval, X_train, predict_fn, name, horizons):
     pred_h = {h: [] for h in horizons}
     true_h = {h: [] for h in horizons}
     for t0 in starts:
-        # Predict h-step rollout from X_eval[t0]
         X_traj = predict_fn(X_eval[t0], A_eval[t0:t0 + max_h],
                             U_eval[t0:t0 + max_h] if U_eval is not None else None)
         for h in horizons:
@@ -109,7 +95,6 @@ def eval_rollout(X_eval, A_eval, U_eval, X_train, predict_fn, name, horizons):
         Tn = np.stack(true_h[h], axis=0)
         mse = float(((P - Tn) ** 2).sum(axis=2).mean())
         metrics[f"mse_h{h}"] = mse
-        # Bin edges from train
         edges = v2.fit_bin_edges(X_train, n_bins=32)
         Pd = v2.discretize(P, edges)
         Td = v2.discretize(Tn, edges)
@@ -132,7 +117,6 @@ def run_seed_v10(seed, base_data_dir, config_prefix="confact_chain_d4",
                                    oracle["mechanism_params"], rng,
                                    k_holdout, T_per_module=1000)
 
-    # === confshift eval (where Theorem 1 bites) ===
     rng_cs = np.random.default_rng(seed * 31 + 23)
     ev_cs = simulate(cfg, oracle["GV_edges"], oracle["mechanism_params"],
                      {"confounder_shift": True, "conf_mu": 2.5}, rng_cs, T=2500)
@@ -140,14 +124,12 @@ def run_seed_v10(seed, base_data_dir, config_prefix="confact_chain_d4",
     X_train, A_train = obs["X"], obs["A"]
     X_eval, A_eval, U_eval = ev_cs["X"], ev_cs["A"], ev_cs["U_conf"]
 
-    # B2 fit (joint OLS)
     W_b2 = b2_fit(X_train, A_train, K, n, m)
     def pred_b2(X0, A_seq, U=None):
         return rollout_b2(X0, A_seq, W_b2, K, n, m, A_seq.shape[0])
     def pred_b10(X0, A_seq, U=None):
         return rollout_b10_with_conf(X0, A_seq, U, oracle, K, n, A_seq.shape[0])
 
-    # B7 (observational candidate edges) - causal-no-int
     cand_obs = v2.b7_candidate_edges(X_train, K, threshold=0.10)
     parents_b7 = {k: [] for k in range(K)}
     for (i, j) in cand_obs:
@@ -157,7 +139,6 @@ def run_seed_v10(seed, base_data_dir, config_prefix="confact_chain_d4",
         return rollout_per_module(X0, A_seq, coefs_b7, parents_b7, K, n, m,
                                   A_seq.shape[0], lag=1)
 
-    # B8d ICP-validated edges
     icp = v5.icp_validate_all(rich["X"], rich["A"], rich["intervention_mask"],
                               K, n, m, alpha=alpha_icp)
     parents_b8 = {k: [] for k in range(K)}
@@ -196,7 +177,6 @@ def main():
         print(f"\n=== seed {s} (confact_chain γ=0.5 γ_A=2.0 + confshift eval) ===", flush=True)
         r = run_seed_v10(s, args.data_dir, horizons=horizons)
         per_seed.append(r)
-        # Print table
         print(f"  {'baseline':<22} " + "".join(f"  h={h:>2}_EM h={h:>2}_MSE" for h in horizons))
         for b, m in r["metrics"].items():
             line = f"  {b:<22}"
@@ -206,7 +186,6 @@ def main():
             print(line, flush=True)
 
     elapsed = time.time() - t0
-    # Aggregate
     agg_em = {b: {h: 0.0 for h in horizons} for b in ["B10_oracle", "B2_global_seq", "B7_causal_no_int", "B8_fcc"]}
     agg_mse = {b: {h: 0.0 for h in horizons} for b in ["B10_oracle", "B2_global_seq", "B7_causal_no_int", "B8_fcc"]}
     for r in per_seed:
@@ -227,13 +206,12 @@ def main():
             line += f"  {agg_em[b][h]:.4f}  {agg_mse[b][h]:.3f}  "
         print(line)
 
-    # G3 gate
     print()
     print("=== G3 gate (Δ(h) = B8 EM - B2 EM, monotone & Δ_10 ≥ +7.5pp) ===")
     deltas = {}
     for h in horizons:
         d_em = (agg_em["B8_fcc"][h] - agg_em["B2_global_seq"][h]) * 100
-        d_mse = agg_mse["B2_global_seq"][h] - agg_mse["B8_fcc"][h]  # positive = B8 better
+        d_mse = agg_mse["B2_global_seq"][h] - agg_mse["B8_fcc"][h]
         d_mse_b10 = agg_mse["B2_global_seq"][h] - agg_mse["B10_oracle"][h]
         deltas[h] = {"em_pp": round(d_em, 2), "mse_diff_B2-B8": round(d_mse, 3),
                      "mse_diff_B2-B10": round(d_mse_b10, 3)}
@@ -242,7 +220,6 @@ def main():
     monotone = all(vals_em[i+1] >= vals_em[i] - 0.01 for i in range(len(vals_em)-1))
     print(f"\n  Monotone (EM): {monotone}")
     print(f"  Δ_10 = {deltas[10]['em_pp']}pp (gate ≥ +7.5pp): {'PASS' if deltas[10]['em_pp'] >= 7.5 else 'FAIL'}")
-    # Try also MSE-based (more natural metric for SCM)
     mse_vals = [deltas[h]["mse_diff_B2-B8"] for h in horizons]
     monotone_mse = all(mse_vals[i+1] >= mse_vals[i] - 0.01 for i in range(len(mse_vals)-1))
     print(f"\n  Monotone (MSE B2-B8): {monotone_mse}")

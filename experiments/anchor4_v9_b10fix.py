@@ -1,22 +1,3 @@
-"""
-anchor4_v9_b10fix.py — V8 with corrected B10 (oracle now includes U_conf term).
-
-V8 bug: B10 was missing the `gamma * V_k @ U_conf[t]` confounder contribution,
-making B10 MSE > B2 MSE under confshift.  This patch:
-  - B10 takes the eval split's stored U_conf array (already saved by simulate())
-  - Adds gamma * V_k @ U_conf[t] to the rollout
-
-Also re-fits eval-split bin edges from a combined (train + eval) pool so EM
-discretization is not artificially saturated under confshift.
-
-Two-branch reporting:
-  - Pass:    B8 ≥ B10-3pp on confshift AND B8 ≥ B2+10pp on confshift|unseen_int
-  - Fail-1:  B2 not degraded (delta_int_obs near 0) → genuine SCM design issue
-  - Fail-2:  B2 degrades but B8 also degrades comparably → linear-Gaussian SCM
-             is identifiable from obs by K-block OLS (Pearl 2009 §1.4) and
-             cannot show causal-advantage in this regime
-"""
-
 from __future__ import annotations
 import argparse
 import json
@@ -29,14 +10,13 @@ import numpy as np
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO_ROOT)
 sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
-from fed_causal.synthetic_scm_skeleton import simulate                # noqa: E402
-from experiments import anchor4_sanity_v2 as v2                       # noqa: E402
-from experiments import anchor4_v5_icp as v5                          # noqa: E402
-from experiments import anchor4_v6_unseen as v6                       # noqa: E402
+from fed_causal.synthetic_scm_skeleton import simulate
+from experiments import anchor4_sanity_v2 as v2
+from experiments import anchor4_v5_icp as v5
+from experiments import anchor4_v6_unseen as v6
 
 
 def b10_predict_with_conf(X, A, U_conf, oracle, K, n) -> np.ndarray:
-    """B10 oracle with U_conf included (full Assumption-2 oracle)."""
     params = oracle["mechanism_params"]
     cfg = oracle["config"]
     alpha = cfg["alpha"]
@@ -53,14 +33,12 @@ def b10_predict_with_conf(X, A, U_conf, oracle, K, n) -> np.ndarray:
                     continue
                 t_src = max(0, t - 1 - lag)
                 xn += alpha * params["W_cross"][(i, j, lag)] @ np.tanh(X[t_src, i])
-            # Confounder term (Assumption 2)
             xn += gamma * params["V"][k] @ U_conf[t]
             pred[t, k] = xn
     return pred
 
 
 def fit_bins_from_pool(X_train, X_eval, n_bins=32):
-    """Fit bins from a combined pool to avoid eval-shift saturation."""
     pool = np.concatenate([X_train, X_eval], axis=0)
     return v2.fit_bin_edges(pool, n_bins=n_bins)
 
@@ -119,12 +97,9 @@ def run_seed_v9(seed: int, base_data_dir: str,
 
     X_train, A_train = obs["X"], obs["A"]
 
-    # === Predictors ===
-    # B2 joint OLS (fit once on obs train)
     def b2_pred(X_e, A_e):
         return v2.b2_fit_predict(X_train, A_train, X_e, A_e, K, n, m)
 
-    # B7 obs candidate edges
     cand_obs = v2.b7_candidate_edges(X_train, K, threshold=0.10)
     parents_b7 = {k: [] for k in range(K)}
     for (i, j) in cand_obs:
@@ -134,7 +109,6 @@ def run_seed_v9(seed: int, base_data_dir: str,
     def b7_pred(X_e, A_e):
         return v2.predict_per_module(X_e, A_e, coefs_b7, parents_b7, lag=1)
 
-    # B8 ICP-validated
     icp = v5.icp_validate_all(rich["X"], rich["A"], rich["intervention_mask"],
                               K, n, m, alpha=alpha_icp)
     parents_b8 = {k: [] for k in range(K)}
@@ -145,7 +119,6 @@ def run_seed_v9(seed: int, base_data_dir: str,
     def b8_pred(X_e, A_e):
         return v2.predict_per_module(X_e, A_e, coefs_b8, parents_b8, lag=1)
 
-    # === Evaluate on each split (B10 uses U_conf from each split) ===
     per_split = {}
     for split_name, ev in eval_splits.items():
         X_e, A_e, U_e = ev["X"], ev["A"], ev["U_conf"]
@@ -165,7 +138,6 @@ def run_seed_v9(seed: int, base_data_dir: str,
                                        n_bins_list=(20, 32)),
             }
 
-    # delta_int observed = B2 EM drop and MSE rise across splits
     delta = {}
     for tgt in ["confshift", "unseen_int"]:
         delta[f"B2_em32_pooled_drop_iid_to_{tgt}_pp"] = (
@@ -247,7 +219,6 @@ def main():
         for k in per_seed[0]["delta_int_observed"]
     }
 
-    # GATE: primary=confshift on em_32bin_pooled
     gates = {}
     for split in ["confshift", "unseen_int"]:
         s = summary["aggregate_per_split"][split]

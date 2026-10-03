@@ -21,7 +21,6 @@ logs/
 build/
 dist/
 
-# Shared research-artifact hygiene
 .AppleDouble
 ._*
 .vscode/

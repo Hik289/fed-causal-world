@@ -1,25 +1,3 @@
-"""
-exp7_g6_g7.py — Synthetic SCM analysis for G6 + G7
-
-G7 (intervention coverage scaling):
-  For each p_int level ∈ {0, 0.05, 0.10, 0.25, 0.50, 1.0}, subsample the
-  rich-int training data to keep only fraction p_int of intervention events.
-  Run ICP F-test on subsampled data and measure:
-    - edge_f1 (graph recovery quality)
-    - B8d MSE on confshift eval (downstream prediction)
-    - N_min (count of matched intervention events)
-  Compare with Theorem 2 prediction: N_min ≈ log(|E_M*|/δ)/(q_min·r_min) ≈ 12-51
-  Saturation: marginal gain ≤ 1pp after p_int ≥ 0.25.
-
-G6 (Spearman ρ of Δ_causal vs depth d / α / γ):
-  Re-run anchor_4 v9-style pipeline at varied (d, α, γ) parameter sweeps.
-  Δ_causal = B2 MSE - B10 MSE (oracle vs non-causal) at h=10.
-  Compute Spearman ρ of Δ_causal vs each parameter.
-  Predict: ρ ≥ 0.7 for d (Proposition 1) and γ (Theorem 1).
-
-CPU only, ~30-60 min.
-"""
-
 from __future__ import annotations
 import argparse
 import json
@@ -33,22 +11,17 @@ import numpy as np
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO_ROOT)
 sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
-from experiments import anchor4_sanity_v2 as v2                              # noqa: E402
-from experiments import anchor4_v5_icp as v5                                 # noqa: E402
-from experiments import anchor4_v6_unseen as v6                              # noqa: E402
-from fed_causal.synthetic_scm_skeleton import SCMConfig, simulate            # noqa: E402
+from experiments import anchor4_sanity_v2 as v2
+from experiments import anchor4_v5_icp as v5
+from experiments import anchor4_v6_unseen as v6
+from fed_causal.synthetic_scm_skeleton import SCMConfig, simulate
 
 
-# =========================================================
-# G7: Intervention coverage scaling
-# =========================================================
 
 def subsample_rich(rich: dict, p_int: float, seed: int = 0) -> dict:
-    """Keep only fraction p_int of intervention events; zero out the rest."""
     rng = np.random.default_rng(seed)
     int_mask = rich["intervention_mask"].copy()
     T, K = int_mask.shape
-    # find all (t, k) where intervention occurred
     int_locs = np.argwhere(int_mask == 1)
     n_int = len(int_locs)
     keep_n = int(np.round(p_int * n_int))
@@ -87,10 +60,8 @@ def g7_run_seed(seed: int, base_data_dir: str, p_ints: List[float],
     GM_adj = np.asarray(oracle["GM_adj"])
     true_edges = [(int(i), int(j)) for i in range(K) for j in range(K) if GM_adj[i, j] > 0]
 
-    # Reference: oracle MSE
     pred_b10 = v2.b10_predict(X_eval, A_eval, oracle, K, n)
     b10_mse = v5.cont_mse(pred_b10, X_eval)
-    # B2 baseline (always same regardless of p_int)
     pred_b2 = v2.b2_fit_predict(X_train, A_train, X_eval, A_eval, K, n, m)
     b2_mse = v5.cont_mse(pred_b2, X_eval)
 
@@ -101,9 +72,7 @@ def g7_run_seed(seed: int, base_data_dir: str, p_ints: List[float],
     for p in p_ints:
         rich_sub = subsample_rich(rich_full, p, seed=seed)
         n_int_sub = int(rich_sub["intervention_mask"].sum())
-        # ICP F-test on subsampled
         if n_int_sub < 5:
-            # too few interventions — return zero edges
             icp = {"validated_edges": [], "details": {}}
         else:
             icp = v5.icp_validate_all(rich_sub["X"], rich_sub["A"],
@@ -118,7 +87,6 @@ def g7_run_seed(seed: int, base_data_dir: str, p_ints: List[float],
         rec = tp / max(1, tp + fn)
         f1 = 2 * prec * rec / max(1e-9, prec + rec)
 
-        # Fit B8d with these parents
         parents_b8 = {k: [] for k in range(K)}
         for (i, j) in icp["validated_edges"]:
             parents_b8[j].append(i)
@@ -149,15 +117,11 @@ def g7_run_seed(seed: int, base_data_dir: str, p_ints: List[float],
             "K": K, "results": results}
 
 
-# =========================================================
-# G6: Spearman ρ of Δ_causal vs (d, α, γ)
-# =========================================================
 
 def gen_scm_with_params(cfg_base: dict, K=5, chain_depth=4, alpha=0.5,
                         gamma=0.5, gamma_A=2.0, lag_mean=0, sigma=0.10,
                         confound_action=True, seed=0,
                         T_train=5000, T_eval=2000) -> Dict[str, Any]:
-    """Generate a fresh SCM with given parameter values + run B2/B10 + eval on confshift."""
     cfg = SCMConfig(
         K=K, n_k=4, m_k=2, rho=0.0, d=chain_depth,
         alpha=alpha, lag_mean=lag_mean, gamma=gamma, sigma=sigma,
@@ -168,7 +132,6 @@ def gen_scm_with_params(cfg_base: dict, K=5, chain_depth=4, alpha=0.5,
     out = __import__("synthetic_scm_skeleton").generate_all_splits(cfg)
     oracle = out["oracle"]
     obs = out["splits"]["obs"]
-    # confshift eval
     rng_cs = np.random.default_rng(seed * 31 + 23)
     ev_cs = simulate(cfg, oracle["GV_edges"], oracle["mechanism_params"],
                      {"confounder_shift": True, "conf_mu": 2.5}, rng_cs, T=1500)
@@ -179,12 +142,11 @@ def gen_scm_with_params(cfg_base: dict, K=5, chain_depth=4, alpha=0.5,
     pred_b2 = v2.b2_fit_predict(X_train, A_train, X_eval, A_eval, K, cfg.n_k, cfg.m_k)
     b10_mse = v5.cont_mse(pred_b10, X_eval)
     b2_mse = v5.cont_mse(pred_b2, X_eval)
-    delta_causal_mse = b2_mse - b10_mse  # positive = causal wins by this much
-    # EM-based
+    delta_causal_mse = b2_mse - b10_mse
     edges = v2.fit_bin_edges(X_train, n_bins=32)
     b2_em = v2.transition_em(v2.discretize(pred_b2, edges), v2.discretize(X_eval, edges))
     b10_em = v2.transition_em(v2.discretize(pred_b10, edges), v2.discretize(X_eval, edges))
-    delta_causal_em = (b10_em - b2_em) * 100  # in pp
+    delta_causal_em = (b10_em - b2_em) * 100
     return {"alpha": alpha, "gamma": gamma, "chain_depth": chain_depth,
             "seed": seed, "B2_MSE": b2_mse, "B10_MSE": b10_mse,
             "delta_causal_MSE": delta_causal_mse,
@@ -192,7 +154,6 @@ def gen_scm_with_params(cfg_base: dict, K=5, chain_depth=4, alpha=0.5,
 
 
 def spearman_rho(xs, ys):
-    """Compute Spearman ρ via numpy rank correlation."""
     xs = np.array(xs); ys = np.array(ys)
     n = len(xs)
     if n < 2: return 0.0
@@ -204,12 +165,10 @@ def spearman_rho(xs, ys):
 
 
 def g6_sweep(seed: int = 0) -> Dict[str, Any]:
-    """Sweep depth d, effect strength α, confounding γ; compute Spearman ρ."""
     print("\n=== G6 sweep: depth d ===")
     d_values = [1, 2, 3, 4, 6, 8]
     d_runs = []
     for d in d_values:
-        # K must be >= d+1 for chain of depth d
         K = max(5, d + 1)
         r = gen_scm_with_params({}, K=K, chain_depth=min(d, K-1), alpha=0.5,
                                 gamma=0.5, gamma_A=2.0, seed=seed,
@@ -237,7 +196,6 @@ def g6_sweep(seed: int = 0) -> Dict[str, Any]:
     gamma_values = [0.0, 0.25, 0.5, 0.75, 1.0]
     g_runs = []
     for g in gamma_values:
-        # gamma_A scaled with gamma to keep backdoor magnitude
         r = gen_scm_with_params({}, K=5, chain_depth=4, alpha=0.5,
                                 gamma=g, gamma_A=2.0 * max(g, 0.1), seed=seed,
                                 T_train=3000, T_eval=1500)
@@ -267,7 +225,6 @@ def main():
 
     t0 = time.time()
 
-    # ============== G7 ==============
     print("=" * 90)
     print("G7: Intervention Coverage Scaling")
     print("=" * 90)
@@ -281,7 +238,6 @@ def main():
         for row in r["results"]:
             print(f"  {row['p_int']:>7.2f} {row['n_int_used']:>7} {row['n_validated_edges']:>9} {row['edge_f1']:>9.3f} {row['B8d_MSE']:>10.3f} {row['B8d_EM32']:>10.4f} {row['B2_MSE']:>10.3f}")
 
-    # Aggregate G7
     print()
     print("=" * 90)
     print("G7 AGGREGATE (mean across seeds)")
@@ -316,7 +272,6 @@ def main():
     sat_check = abs(g7_agg[4]["avg_edge_f1"] - g7_agg[5]["avg_edge_f1"])
     print(f"  Saturation check: |edge_f1(p=0.5) - edge_f1(p=1)| = {sat_check:.3f} (saturated if ≤ 0.05)")
 
-    # ============== G6 ==============
     print()
     print("=" * 90)
     print("G6: Spearman ρ of Δ_causal vs (d, α, γ)")

@@ -1,20 +1,3 @@
-"""
-exp1_alfworld_v3.py — ALFWorld X fix v3 (after v2 0/5 diagnostic).
-
-Diagnostic from v2: Agent's ReAct format works perfectly, but it always
-searches fridge → cabinets first, missing items on countertops/shelves/drawers.
-Task 0 had tomato on countertop 1, plain sight. Agent never went there.
-
-V3 changes:
-  1. STRONG search-order hint: "Items are usually on countertops, in drawers,
-     on shelves, on stoveburner. The fridge contains cold items; cabinets often
-     hold cookware not ingredients."
-  2. ENCOURAGE 'inventory' and 'look' early
-  3. Add 2-task few-shot demo (one heat task, one cool task with search) so
-     model sees a search strategy that explores countertops first
-  4. max_steps remains 50 (already enough; problem was strategy not budget)
-"""
-
 from __future__ import annotations
 import json
 import os
@@ -115,7 +98,6 @@ BASELINE_HEADERS = {
 }
 
 
-# Two ReAct demos showing efficient search (countertops first!)
 FEWSHOT_DEMO = """=== EXAMPLE 1: heat task ===
 Observation: -= Welcome to TextWorld, ALFRED! =-
 You see a cabinet 1, a countertop 1, a fridge 1, a microwave 1, a sinkbasin 1.

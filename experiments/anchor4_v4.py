@@ -1,8 +1,3 @@
-"""Run V3 on medium_chain_d4 (gamma=0.5 — Theorem 1 bound active).
-
-Also test on a confounder-shift eval split where δ_int² should drive B2 down.
-"""
-
 import json
 import os
 import pickle
@@ -23,7 +18,6 @@ out_dir = "runs/anchor_4_v4"
 
 
 def gen_confounder_eval(cfg, GV, params, rng, T=1500, conf_mu=2.5):
-    """Eval under confounder-shift: U_conf ~ N(mu_shift, I) — Theorem 1 δ_int² bites here."""
     spec = {"confounder_shift": True, "conf_mu": conf_mu}
     return simulate(cfg, GV, params, spec, rng, T)
 
@@ -39,7 +33,6 @@ def run_seed_medium(seed, base_data_dir=base, n_bins=5):
     rng = np.random.default_rng(seed*31+17)
     rich = v2.gen_rich_int_train(cfg, oracle["GV_edges"], oracle["mechanism_params"],
                                   rng, T_per_module=800)
-    # CONFOUNDER-SHIFT eval — Theorem 1's regime
     rng2 = np.random.default_rng(seed*31+19)
     eval_split = gen_confounder_eval(cfg, oracle["GV_edges"], oracle["mechanism_params"],
                                        rng2, T=1500, conf_mu=2.5)

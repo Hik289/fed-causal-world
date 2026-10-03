@@ -1,28 +1,3 @@
-"""
-anchor4_v6_unseen.py — V5 ICP regression + unseen-intervention eval (Theorem 1
-proper regime per insight.md eq:lower-bound).
-
-Diagnostic insight from V5: B2's global K-block OLS can absorb confounder-shift
-when X[t] reflects the shifted mean (B2 trained on observational data still
-learns the X[t] -> X[t+1] map and just extrapolates).  Confounder-shift is NOT
-where non-causal WMs catastrophically fail.
-
-The Theorem 1 regime is **unseen interventional distributions**: do(A_k_holdout
-= a*) where k_holdout was NOT intervened in train.  Here the joint distribution
-of (X[t], A[t]) is shifted to a region where B2's OLS extrapolation must rely
-on covariate-shift assumption, which is exactly what fails per Pearl 2009.
-
-V6:
-  - eval = unseen_int (do(A_{k_holdout}=a*) at high rate)
-  - train rich-int: do() only on modules 0..K-2 (k_holdout = K-1 reserved)
-  - keep gamma=0.5 medium config
-  - keep ICP F-test from V5 (alpha=0.05)
-  - keep 32-bin EM as primary; also report continuous MSE
-
-Also bump α down to 0.01 (lower false-positive rate) to reduce spurious edges
-that hurt B8 OLS fit.
-"""
-
 from __future__ import annotations
 import argparse
 import json
@@ -35,14 +10,13 @@ import numpy as np
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO_ROOT)
 sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
-from fed_causal.synthetic_scm_skeleton import SCMConfig, simulate      # noqa: E402
-from experiments import anchor4_sanity_v2 as v2                        # noqa: E402
-from experiments import anchor4_v5_icp as v5                           # noqa: E402
+from fed_causal.synthetic_scm_skeleton import SCMConfig, simulate
+from experiments import anchor4_sanity_v2 as v2
+from experiments import anchor4_v5_icp as v5
 
 
 def gen_rich_int_holdout(cfg, GV, params, rng, k_holdout: int,
                          T_per_module: int = 1000):
-    """Rich-int train but skip k_holdout (reserved for unseen-int eval)."""
     parts, masks = [], []
     for k in range(cfg.K):
         if k == k_holdout:
@@ -59,7 +33,6 @@ def gen_rich_int_holdout(cfg, GV, params, rng, k_holdout: int,
 
 
 def gen_unseen_int_eval(cfg, GV, params, rng, k_holdout: int, T: int = 1500):
-    """Eval under intervention on the holdout module."""
     spec = {"do_module": k_holdout, "do_value": np.ones(cfg.m_k), "rate": 0.40}
     return simulate(cfg, GV, params, spec, rng, T)
 
@@ -72,7 +45,7 @@ def run_seed_v6(seed: int, base_data_dir: str, config_prefix: str,
         oracle = pickle.load(f)
     cfg = v5.reload_cfg(oracle["config"])
     K, n, m = cfg.K, cfg.n_k, cfg.m_k
-    k_holdout = K - 1  # last module in chain is holdout
+    k_holdout = K - 1
 
     rng = np.random.default_rng(seed * 31 + 17)
     rich = gen_rich_int_holdout(cfg, oracle["GV_edges"],
@@ -190,7 +163,6 @@ def main():
                 "em_32bin": v5.aggregate(per_seed, ("metrics", name, "em_32bin")),
             }
         edge_f1 = v5.aggregate(per_seed, ("edge_f1",))
-        # Use 32-bin EM as primary
         B8 = agg["B8"]["em_32bin"]["mean"]
         B10 = agg["B10"]["em_32bin"]["mean"]
         B2 = agg["B2"]["em_32bin"]["mean"]

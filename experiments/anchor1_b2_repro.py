@@ -1,24 +1,3 @@
-"""
-anchor1_b2_repro.py — H0.anchor_1: B2 (Global Sequence WM = LLM-as-WM via
-tool-calling agent) reproduction on vanilla τ-bench retail.
-
-user gate: Task Success ∈ [35%, 60%] (already-published GPT-4o = 40-55%,
-± 5pp tolerance for GPT-5.4-mini vs GPT-4o; specification §3).
-
-Implementation:
-  - Use τ-bench's ToolCallingAgent (acts as B2: full global tool-calling
-    sequence model) on retail test split.
-  - Monkey-patch litellm.completion to inject Azure key + base inline
-    (API config: NO env vars, credentials only inline in code).
-  - User simulator and agent both use gpt-5.4-mini at temp=0.
-  - 5 task subset for cost; optional B0 (ReAct/chat agent) parallel for harness
-    sanity check.
-
-Output:
-  - your-server: anchor_1_run/predictions.jsonl  (per-task reward + cost + steps)
-  - GCP:    results/anchor_1_tau_bench_b2_repro.json (aggregate)
-"""
-
 from __future__ import annotations
 import json
 import os
@@ -27,14 +6,13 @@ import time
 import traceback
 from typing import Any, Dict, List
 
-# === API config: INLINE CREDS (NO env vars, file is .gitignored) ===
 AZURE_API_KEY = os.environ.get("FED_CAUSAL_API_KEY") or os.environ.get("OPENAI_API_KEY")
 AZURE_API_BASE = os.environ.get("FED_CAUSAL_API_BASE_URL") or os.environ.get("OPENAI_BASE_URL")
 MODEL_NAME = os.environ.get("FED_CAUSAL_MODEL", "openai/gpt-5.4-mini")
 DEPLOYMENT = MODEL_NAME.rsplit("/", 1)[-1]
 
-PRICE_INPUT_PER_1M = 0.25     # USD / 1M input tokens (gpt-5.4-mini)
-PRICE_OUTPUT_PER_1M = 2.00    # USD / 1M output tokens
+PRICE_INPUT_PER_1M = 0.25
+PRICE_OUTPUT_PER_1M = 2.00
 
 
 
@@ -42,34 +20,25 @@ import litellm
 
 _original_completion = litellm.completion
 
-# Per-call usage tracker (litellm doesn't always populate response_cost on Azure)
 _usage_log: List[Dict[str, Any]] = []
 
 
 def _patched_completion(*args, **kwargs):
-    # Force our Azure endpoint
     if AZURE_API_KEY:
         kwargs.setdefault("api_key", AZURE_API_KEY)
     if AZURE_API_BASE:
         kwargs.setdefault("api_base", AZURE_API_BASE)
-    # Force the same model (tau-bench passes model="openai/gpt-5.4-mini" already
-    # via our --model flag).  If a different model slips in (e.g. user-model),
-    # still route to our deployment.
     if not kwargs.get("model", "").endswith(DEPLOYMENT):
         kwargs["model"] = MODEL_NAME
-    # litellm.completion drops custom_llm_provider=None on some paths; ensure
-    # openai-compatible routing.
     kwargs.setdefault("custom_llm_provider", "openai")
     t0 = time.time()
     res = _original_completion(*args, **kwargs)
     elapsed = time.time() - t0
-    # Extract usage + cost
     try:
         u = res.usage
         pt = getattr(u, "prompt_tokens", 0) or 0
         ct = getattr(u, "completion_tokens", 0) or 0
         usd = (pt * PRICE_INPUT_PER_1M + ct * PRICE_OUTPUT_PER_1M) / 1_000_000.0
-        # Force response_cost so tau_bench accounting works
         if hasattr(res, "_hidden_params"):
             res._hidden_params["response_cost"] = usd
         else:
@@ -78,7 +47,7 @@ def _patched_completion(*args, **kwargs):
             "prompt_tokens": pt, "completion_tokens": ct,
             "usd": usd, "elapsed_s": elapsed,
         })
-    except Exception:  # noqa: BLE001
+    except Exception:
         pass
     return res
 
@@ -86,9 +55,6 @@ def _patched_completion(*args, **kwargs):
 litellm.completion = _patched_completion
 
 
-# ---------------------------------------------------------------------------
-# Run a small subset of vanilla τ-bench retail tasks
-# ---------------------------------------------------------------------------
 
 from tau_bench.envs.retail.env import MockRetailDomainEnv
 from tau_bench.agents.tool_calling_agent import ToolCallingAgent
@@ -125,7 +91,7 @@ def run_anchor_1(task_indices: List[int], log_dir: str) -> Dict[str, Any]:
             n_msgs = len(result.messages)
             total_cost = float(result.total_cost or 0.0)
             err = None
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             reward = 0.0
             n_msgs = 0
             total_cost = 0.0
@@ -155,7 +121,6 @@ def run_anchor_1(task_indices: List[int], log_dir: str) -> Dict[str, Any]:
     fp.close()
     total_elapsed = time.time() - t_global
 
-    # Aggregate
     n = len(per_task)
     successes = sum(1 for r in per_task if r["task_success"])
     avg_usd = sum(r["task_usd"] for r in per_task) / max(1, n)

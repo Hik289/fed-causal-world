@@ -1,21 +1,3 @@
-"""
-exp1_alfworld.py — Exp1 on ALFWorld valid_unseen, 9 baselines × N tasks × 1 seed.
-
-specification: PILOT FIRST (5 tasks × B2 only), measure cost/task, abort if
-estimate $0.025 ±20% violated. Then full 268 tasks × 9 baselines on PASS.
-
-ReAct-style agent (no tool-calling, plain text actions):
-  System: baseline-specific WM header + ALFWorld instructions
-  User:   observation + admissible commands (truncated to 30)
-  Model:  reasoning + "ACTION: <command>"
-  Loop until won/lost or max_steps=30.
-
-Differences from τ-bench harness:
-  - No user simulator (env is deterministic)
-  - No tool-calling (plain text command)
-  - Admissible-command grounding (model picks from finite list)
-"""
-
 from __future__ import annotations
 import json
 import os
@@ -26,7 +8,6 @@ import traceback
 import yaml
 from typing import Any, Dict, List, Optional
 
-# API configuration is read from the environment.
 AZURE_API_KEY = os.environ.get("FED_CAUSAL_API_KEY") or os.environ.get("OPENAI_API_KEY")
 AZURE_API_BASE = os.environ.get("FED_CAUSAL_API_BASE_URL") or os.environ.get("OPENAI_BASE_URL")
 MODEL_NAME = os.environ.get("FED_CAUSAL_MODEL", "openai/gpt-5.4-mini")
@@ -69,9 +50,6 @@ def _patched_completion(*args, **kwargs):
 litellm.completion = _patched_completion
 
 
-# --------------------------------------------------------------------------
-# ALFWorld modularization summary (from modularization_spec.md §2)
-# --------------------------------------------------------------------------
 
 MODULARIZATION_SUMMARY = (
     "ALFWorld has 6 functional modules: navigation, container_access, "
@@ -157,29 +135,22 @@ Rules:
 - If the task is done, output 'ACTION: look' (no-op)."""
 
 
-# --------------------------------------------------------------------------
-# Agent loop
-# --------------------------------------------------------------------------
 
 ACTION_RE = re.compile(r"ACTION:\s*(.+?)$", re.IGNORECASE | re.MULTILINE)
 
 
 def extract_action(text: str, admissible: List[str]) -> str:
-    """Parse ACTION: <cmd>; fallback to first admissible if unparseable."""
     m = ACTION_RE.search(text)
     if m:
         cmd = m.group(1).strip().rstrip(".")
-        # Match exactly first
         if cmd in admissible:
             return cmd
-        # Loose match: substring
         for adm in admissible:
             if cmd.lower() == adm.lower():
                 return adm
         for adm in admissible:
             if cmd.lower() in adm.lower() or adm.lower() in cmd.lower():
                 return adm
-    # Fallback: pick first non-look admissible
     for adm in admissible:
         if not adm.startswith("look"):
             return adm
@@ -187,7 +158,6 @@ def extract_action(text: str, admissible: List[str]) -> str:
 
 
 def run_one_task(baseline_id: str, env, max_steps: int = 30) -> Dict[str, Any]:
-    """env is an already-initialized AlfredTWEnv batch_size=1."""
     header = BASELINE_HEADERS[baseline_id]
     obs, info = env.reset()
     obs_text = obs[0]
@@ -227,9 +197,7 @@ def run_one_task(baseline_id: str, env, max_steps: int = 30) -> Dict[str, Any]:
         if done or won:
             break
 
-        # Append turn
         messages.append({"role": "assistant", "content": text})
-        # Trim message history to last 6 to control context
         if len(messages) > 12:
             messages = [messages[0]] + messages[-8:]
         messages.append({
@@ -244,20 +212,16 @@ def run_one_task(baseline_id: str, env, max_steps: int = 30) -> Dict[str, Any]:
             "error": None}
 
 
-# --------------------------------------------------------------------------
-# Multi-baseline driver
-# --------------------------------------------------------------------------
 
 def run_baseline(baseline_id: str, n_tasks: int, env_factory,
                  log_dir: str) -> Dict[str, Any]:
-    """env_factory: () -> initialized AlfredTWEnv batch_size=1"""
     os.makedirs(log_dir, exist_ok=True)
     pred_path = os.path.join(log_dir, f"{baseline_id}_predictions.jsonl")
     fp = open(pred_path, "w")
 
     per_task = []
     t_start = time.time()
-    env = env_factory()  # one env, reset per task
+    env = env_factory()
     for idx in range(n_tasks):
         t0 = time.time()
         _usage_log.clear()
@@ -306,7 +270,6 @@ def run_baseline(baseline_id: str, n_tasks: int, env_factory,
 
 
 def make_env_factory(config_path: str):
-    """Returns a factory that builds a fresh ALFWorld env (cached after 1st)."""
     config = yaml.safe_load(open(config_path))
     from alfworld.agents.environment import get_environment
     env_class = get_environment("AlfredTWEnv")

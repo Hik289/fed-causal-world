@@ -1,14 +1,3 @@
-"""
-exp1_alfworld_v2.py — ALFWorld X fix per Launcher directive (2026-06-21 05:50 UTC).
-
-Changes vs v1:
-  1. max_steps: 30 → 50 (ALF valid_unseen mean traj = 42 steps; need buffer)
-  2. ReAct-style few-shot demo (1 complete task from ALFRED PDDL-derived oracle)
-  3. Clearer system prompt: explicit Thought / Action pattern
-  4. Trim observation context but keep last-3 turns
-  5. Admissible-command list still given, but model is instructed to reason first
-"""
-
 from __future__ import annotations
 import json
 import os
@@ -61,7 +50,6 @@ def _patched_completion(*args, **kwargs):
 litellm.completion = _patched_completion
 
 
-# Modular summary identical to v1
 MODULARIZATION_SUMMARY = (
     "ALFWorld has 6 functional modules: navigation, container_access, "
     "object_manipulation, appliance, object_property, task_monitor. "
@@ -116,8 +104,6 @@ BASELINE_HEADERS = {
 }
 
 
-# Standard ReAct ALFWorld demo (heat task — covers nav + container +
-# manip + appliance + property + monitor). Adapted from Yao 2022 ReAct paper.
 FEWSHOT_DEMO = """=== EXAMPLE TASK (for format reference) ===
 Observation: -= Welcome to TextWorld, ALFRED! =-
 You are in the middle of a room. Looking quickly around you, you see a cabinet 1, a countertop 1, a fridge 1, a microwave 1, a stoveburner 1, and a sinkbasin 1.
@@ -203,11 +189,9 @@ def extract_action(text: str, admissible: List[str]) -> str:
         for adm in admissible:
             if cmd.lower() == adm.lower():
                 return adm
-        # Substring match
         for adm in admissible:
             if cmd.lower() in adm.lower() or adm.lower() in cmd.lower():
                 return adm
-    # Fallback: any 'look' if available, else first
     for adm in admissible:
         if adm.startswith("look"):
             return adm
@@ -222,7 +206,7 @@ def run_one_task(baseline_id: str, env, max_steps: int = 50) -> Dict[str, Any]:
     won = False
     n_calls = 0
     history_actions = []
-    failed_actions = 0   # actions that don't change the world
+    failed_actions = 0
 
     system = f"{header}\n\n{SYSTEM_INSTRUCTIONS}"
     messages = [
@@ -255,14 +239,12 @@ def run_one_task(baseline_id: str, env, max_steps: int = 50) -> Dict[str, Any]:
         if done or won:
             break
 
-        # Track stuck-in-loop
         if obs_text.strip() == last_obs.strip():
             failed_actions += 1
         else:
             failed_actions = 0
         last_obs = obs_text
 
-        # Append turn (keep messages compact)
         messages.append({"role": "assistant", "content": text})
         if len(messages) > 14:
             messages = [messages[0]] + messages[-12:]
@@ -271,7 +253,6 @@ def run_one_task(baseline_id: str, env, max_steps: int = 50) -> Dict[str, Any]:
             "content": _format_user_msg(obs_text, admissible),
         })
 
-        # If stuck >5 consecutive failed actions, terminate (saves API)
         if failed_actions >= 5:
             return {"won": False, "n_steps": len(history_actions),
                     "n_calls": n_calls, "history": history_actions,
@@ -283,7 +264,6 @@ def run_one_task(baseline_id: str, env, max_steps: int = 50) -> Dict[str, Any]:
 
 
 def _format_user_msg(obs: str, admissible: List[str]) -> str:
-    # Truncate admissible to first 30 (most are go-to-receptacle filler)
     adm_str = "\n".join(f"- {c}" for c in admissible[:30])
     if len(admissible) > 30:
         adm_str += f"\n- ... ({len(admissible) - 30} more not shown)"

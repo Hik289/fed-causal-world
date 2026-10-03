@@ -1,34 +1,3 @@
-"""
-anchor4_v8_confact.py — V7 with new --confound_action SCM (Assumption 2 full).
-
-After SCM rewrite (synthetic_scm_skeleton.py: V_A loading + sigmoid policy):
-  A[t,k] ~ Bernoulli(sigmoid(logit(pi_obs) + gamma_A * V_A_k @ U_conf[t]))
-
-This creates X <- U_conf -> A -> X backdoor.  Under do(A=a*), the
-P(X[t+1] | X[t], do(A=a*)) is DIFFERENT from P(X[t+1] | X[t], A=a*) on obs
-because conditioning on A=a in obs leaks U_conf info via inverse-policy.
-
-Predicted by Theorem 1 (hypothesis.md eq:lower-bound):
-  - B2 (OLS on obs):       fits a biased operator → catastrophic on
-                            unseen-int + confounder-shift.
-  - B10 (oracle):          uses ground-truth W_self/B/W_cross AND
-                            ignores U_conf (since gamma is a known structural
-                            param) → unbiased
-  - B8 (ICP recovered):    learns local Fk on obs with correct parents
-                            (X[t-1,i] from i->j edges) but DOES NOT see U_conf;
-                            should still beat B2 because per-module ridge OLS
-                            with correct parents avoids the X-A leak.
-
-Two-branch report (per user request):
-  - Pass: B8 ≥ B10-3pp AND B8 ≥ B2+10pp on confounder-shift eval
-  - Fail-1: B2 NOT degraded (δ_int^2 still ~0) → deeper SCM design issue
-  - Fail-2: B2 degraded but B8 also degraded → ICP B8 doesn't help under
-            unobserved confounder (need do-calculus implementation in B8)
-
-We also report B2's EM DROP from IID -> confounder-shift split as direct
-evidence of δ_int^2 manifestation.
-"""
-
 from __future__ import annotations
 import argparse
 import json
@@ -41,14 +10,13 @@ import numpy as np
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO_ROOT)
 sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
-from experiments import anchor4_sanity_v2 as v2                        # noqa: E402
-from experiments import anchor4_v5_icp as v5                           # noqa: E402
-from experiments import anchor4_v6_unseen as v6                        # noqa: E402
-from fed_causal.synthetic_scm_skeleton import SCMConfig, simulate      # noqa: E402
+from experiments import anchor4_sanity_v2 as v2
+from experiments import anchor4_v5_icp as v5
+from experiments import anchor4_v6_unseen as v6
+from fed_causal.synthetic_scm_skeleton import SCMConfig, simulate
 
 
 def gen_iid_eval(cfg, GV, params, rng, T=1500):
-    """IID obs (no intervention, no shift) for baseline IID EM."""
     return simulate(cfg, GV, params, {}, rng, T)
 
 
@@ -72,14 +40,11 @@ def run_seed_v8(seed: int, base_data_dir: str, config_prefix: str = "confact_cha
     K, n, m = cfg.K, cfg.n_k, cfg.m_k
     k_holdout = K - 1
 
-    # Rich-int train (with confounded-action policy active — SCM now correctly
-    # samples A with gamma_A=2.0 when do() is not injected)
     rng = np.random.default_rng(seed * 31 + 17)
     rich = v6.gen_rich_int_holdout(cfg, oracle["GV_edges"],
                                    oracle["mechanism_params"], rng,
                                    k_holdout, T_per_module=1000)
 
-    # Three eval splits to dissect Theorem 1
     rng_iid = np.random.default_rng(seed * 31 + 21)
     ev_iid = gen_iid_eval(cfg, oracle["GV_edges"],
                           oracle["mechanism_params"], rng_iid, T=1500)
@@ -94,16 +59,12 @@ def run_seed_v8(seed: int, base_data_dir: str, config_prefix: str = "confact_cha
 
     X_train, A_train = obs["X"], obs["A"]
 
-    # --- Fit predictors ---
-    # B10
     def b10_pred(X, A):
         return v2.b10_predict(X, A, oracle, K, n)
 
-    # B2 (joint K-block OLS on obs)
     def b2_pred(X, A):
         return v2.b2_fit_predict(X_train, A_train, X, A, K, n, m)
 
-    # B7 (observational candidate edges)
     cand_obs = v2.b7_candidate_edges(X_train, K, threshold=0.10)
     parents_b7 = {k: [] for k in range(K)}
     for (i, j) in cand_obs:
@@ -113,7 +74,6 @@ def run_seed_v8(seed: int, base_data_dir: str, config_prefix: str = "confact_cha
     def b7_pred(X, A):
         return v2.predict_per_module(X, A, coefs_b7, parents_b7, lag=1)
 
-    # B8 ICP-validated edges from rich-int
     icp = v5.icp_validate_all(rich["X"], rich["A"], rich["intervention_mask"],
                               K, n, m, alpha=alpha_icp)
     parents_b8 = {k: [] for k in range(K)}
@@ -124,7 +84,6 @@ def run_seed_v8(seed: int, base_data_dir: str, config_prefix: str = "confact_cha
     def b8_pred(X, A):
         return v2.predict_per_module(X, A, coefs_b8, parents_b8, lag=1)
 
-    # === Evaluate on each split ===
     splits = {"iid": (ev_iid["X"], ev_iid["A"]),
               "confshift": (ev_cs["X"], ev_cs["A"]),
               "unseen_int": (ev_ui["X"], ev_ui["A"])}
@@ -144,7 +103,6 @@ def run_seed_v8(seed: int, base_data_dir: str, config_prefix: str = "confact_cha
             }
         results_per_split[split_name] = split_metrics
 
-    # Theorem 1 trackers: delta_int^2 manifestation = B2 EM drop IID -> conf-shift
     b2_iid_em32 = results_per_split["iid"]["B2"]["em_32bin"]
     b2_cs_em32 = results_per_split["confshift"]["B2"]["em_32bin"]
     b2_ui_em32 = results_per_split["unseen_int"]["B2"]["em_32bin"]
@@ -153,7 +111,6 @@ def run_seed_v8(seed: int, base_data_dir: str, config_prefix: str = "confact_cha
         "B2_EM_drop_iid_to_unseen_int_pp": (b2_iid_em32 - b2_ui_em32) * 100,
     }
 
-    # Edge metrics
     GM = np.asarray(oracle["GM_adj"])
     true_edges = [(int(i), int(j)) for i in range(K) for j in range(K) if GM[i, j] > 0]
     val_set = set((int(i), int(j)) for (i, j) in icp["validated_edges"])
@@ -230,7 +187,6 @@ def main():
                 summary["aggregate_per_split"][split].setdefault(m, {})
                 summary["aggregate_per_split"][split][m][k] = agg(m, split, k)
 
-    # === GATE evaluation per user: V8 primary = confshift on B8 vs B2/B10 ===
     primary_split = "confshift"
     B10_em = summary["aggregate_per_split"][primary_split]["B10"]["em_32bin"]["mean"]
     B8_em = summary["aggregate_per_split"][primary_split]["B8"]["em_32bin"]["mean"]
@@ -256,7 +212,6 @@ def main():
     gate_primary["overall_pass"] = (gate_primary["criterion_1_pass"]
                                     and gate_primary["criterion_2_pass"])
 
-    # Also try unseen_int split
     for alt_split in ["unseen_int"]:
         B10a = summary["aggregate_per_split"][alt_split]["B10"]["em_32bin"]["mean"]
         B8a = summary["aggregate_per_split"][alt_split]["B8"]["em_32bin"]["mean"]

@@ -1,26 +1,3 @@
-"""
-pipeline.py — FedCausalCompose pipeline core (6 steps).
-
-Implements the spec from FedCausal.md §7 + analysis/hypothesis.md Theorems 2/3.
-
-  Step 1: Local Module Identification
-  Step 2: Interface Discovery
-  Step 3: Distributed Intervention Matching      (tracks N_min / q_i / r_j)
-  Step 4: Cross-Module Edge Validation           (tracks P_verify per edge)
-  Step 5: Causal Composition                     (topo rollout)
-  Step 6: Decentralized Causal Control           (prompt-level constraint emission)
-
-LLM-driven where reasonable, but each step also runs a deterministic skeleton
-(numpy / networkx) so that the pipeline can be unit-tested and B7 (no-int) can
-share it.
-
-Quantitative trackers (per analysis/hypothesis.md):
-  - InterventionResponseMatcher.N_min               -- Definition 5
-  - InterventionResponseMatcher.P_verify(i->j)      -- equation (eq:p-verify)
-  - InterventionResponseMatcher.q_hat[k], r_hat[j]  -- empirical rate estimates
-These are written to results.json for downstream Verifier / Theorist checks.
-"""
-
 from __future__ import annotations
 import json
 import math
@@ -31,33 +8,27 @@ from collections import defaultdict
 import networkx as nx
 
 
-# -----------------------------------------------------------------------------
-# Data structures
-# -----------------------------------------------------------------------------
 
 @dataclass
 class ModuleSpec:
-    """One LCM_k (Local Causal Module) per modularization_spec.md §3."""
     module_id: str
-    X_vars: List[str]                 # local state variables
-    A_vars: List[str]                 # local actions
-    I_out: List[str]                  # outgoing event types
-    I_in: List[str]                   # incoming event types
+    X_vars: List[str]
+    A_vars: List[str]
+    I_out: List[str]
+    I_in: List[str]
 
 
 @dataclass
 class Event:
-    """One outgoing/incoming event record per FedCausal.md §3.3."""
     module_id: str
     event_type: str
     timestamp: int
     payload: Dict[str, Any] = field(default_factory=dict)
-    intervention_id: Optional[str] = None    # set if event triggered by do()
+    intervention_id: Optional[str] = None
 
 
 @dataclass
 class InterventionResponse:
-    """One matched do(A_i) -> Delta X_j tuple per FedCausal.md §7.3."""
     src_module: str
     src_event_type: str
     tgt_module: str
@@ -66,14 +37,8 @@ class InterventionResponse:
     intervention_id: str
 
 
-# -----------------------------------------------------------------------------
-# Step 1: Local Module Identification (deterministic — read modularization_spec)
-# -----------------------------------------------------------------------------
 
 def step1_local_modules(modular_spec: Dict[str, Dict]) -> List[ModuleSpec]:
-    """
-    modular_spec maps module_id -> {X_vars, A_vars, I_out, I_in}.
-    """
     return [ModuleSpec(
         module_id=mid,
         X_vars=list(spec.get("X_vars", [])),
@@ -83,18 +48,10 @@ def step1_local_modules(modular_spec: Dict[str, Dict]) -> List[ModuleSpec]:
     ) for mid, spec in modular_spec.items()]
 
 
-# -----------------------------------------------------------------------------
-# Step 2: Interface Discovery
-# -----------------------------------------------------------------------------
 
 def step2_interface_discovery(modules: List[ModuleSpec],
                               events: List[Event],
                               window: int = 5) -> List[Tuple[str, str, str, str]]:
-    """
-    Build candidate cross-module interface edges by matching outgoing of i to
-    incoming of j within a temporal window. Returns list of
-    (src_module, src_event_type, tgt_module, tgt_event_type) candidate edges.
-    """
     out_idx = defaultdict(list)
     in_idx = defaultdict(list)
     for ev in events:
@@ -109,7 +66,6 @@ def step2_interface_discovery(modules: List[ModuleSpec],
         for (tgt_mod, tgt_ev), tgt_list in in_idx.items():
             if src_mod == tgt_mod:
                 continue
-            # any temporal pairing within window
             j = 0
             for s in src_list:
                 while j < len(tgt_list) and tgt_list[j].timestamp < s.timestamp:
@@ -120,17 +76,8 @@ def step2_interface_discovery(modules: List[ModuleSpec],
     return sorted(candidates)
 
 
-# -----------------------------------------------------------------------------
-# Step 3: Distributed Intervention Matching (tracks N_min / q / r per hypothesis)
-# -----------------------------------------------------------------------------
 
 class InterventionResponseMatcher:
-    """
-    Implements the Theorem 2 / Definition 5 trackers:
-      - N_ij = matched intervention-response counter per (src_module, tgt_module)
-      - q_hat[k] = #(do(A_k=*)) / #(all events for k)  (intervention rate)
-      - r_hat[j] = #(observable responses) / #(potential responses)
-    """
 
     def __init__(self):
         self.matches: List[InterventionResponse] = []
@@ -143,18 +90,12 @@ class InterventionResponseMatcher:
     def match(self, events: List[Event],
               candidate_edges: List[Tuple[str, str, str, str]],
               lag_window: int = 5) -> None:
-        """
-        Walk through events; whenever an outgoing event has intervention_id,
-        and a downstream incoming event from a target module appears within
-        lag_window, record a matched (i, j) tuple.
-        """
         events_sorted = sorted(events, key=lambda e: e.timestamp)
         for ev in events_sorted:
             self.total_count[ev.module_id] += 1
             if ev.intervention_id is not None:
                 self.q_count[ev.module_id] += 1
 
-        # candidate edges as quick lookup
         edge_set = set((s, se, t, te) for (s, se, t, te) in candidate_edges)
 
         for i_idx, src in enumerate(events_sorted):
@@ -166,7 +107,6 @@ class InterventionResponseMatcher:
                     break
                 if (src.module_id, src.event_type, tgt.module_id, tgt.event_type) in edge_set:
                     self.r_pot[tgt.module_id] += 1
-                    # response observability proxy: timestamps must increase strictly
                     if dt >= 0:
                         self.r_obs[tgt.module_id] += 1
                         self.N_ij[(src.module_id, tgt.module_id)] += 1
@@ -188,10 +128,6 @@ class InterventionResponseMatcher:
                 for k in self.r_pot}
 
     def N_min(self, true_edges: Optional[List[Tuple[str, str]]] = None) -> int:
-        """
-        Definition 5: N_min = min_{(i->j) in E_M*} N_ij. If true_edges is None,
-        use observed edges (i.e. min over all matched (i,j)).
-        """
         if true_edges:
             edges = true_edges
         else:
@@ -203,10 +139,6 @@ class InterventionResponseMatcher:
     def p_verify(self, q_min: Optional[float] = None,
                  r_min: Optional[float] = None,
                  N_ij: Optional[int] = None) -> float:
-        """
-        Equation (eq:p-verify): P_verify(i->j) = 1 - (1 - q_i r_j)^N_ij
-        Default: use empirical q_min, r_min, N_min.
-        """
         if q_min is None:
             q_hat = self.q_hat()
             q_min = min(q_hat.values()) if q_hat else 0.0
@@ -237,19 +169,11 @@ def step3_distributed_intervention_matching(
     return m
 
 
-# -----------------------------------------------------------------------------
-# Step 4: Cross-Module Edge Validation
-# -----------------------------------------------------------------------------
 
 def step4_edge_validation(
         matcher: InterventionResponseMatcher,
         candidate_edges: List[Tuple[str, str, str, str]],
         p_verify_threshold: float = 0.50) -> List[Tuple[str, str, str, str]]:
-    """
-    For each candidate edge, compute P_verify and keep edges above threshold.
-
-    p_verify(i->j) = 1 - (1 - q_i * r_j) ** N_ij.
-    """
     q_hat = matcher.q_hat()
     r_hat = matcher.r_hat()
     validated = []
@@ -263,9 +187,6 @@ def step4_edge_validation(
     return validated
 
 
-# -----------------------------------------------------------------------------
-# Step 5: Causal Composition (topological rollout)
-# -----------------------------------------------------------------------------
 
 def step5_compose_graph(modules: List[ModuleSpec],
                         validated_edges: List[Tuple[str, str, str, str]]) -> nx.DiGraph:
@@ -279,7 +200,6 @@ def step5_compose_graph(modules: List[ModuleSpec],
 
 def step5_topological_order(G: nx.DiGraph) -> List[str]:
     if not nx.is_directed_acyclic_graph(G):
-        # Break cycles greedy: remove highest-betweenness edge
         H = G.copy()
         while not nx.is_directed_acyclic_graph(H):
             bet = nx.edge_betweenness_centrality(H)
@@ -289,15 +209,8 @@ def step5_topological_order(G: nx.DiGraph) -> List[str]:
     return list(nx.topological_sort(G))
 
 
-# -----------------------------------------------------------------------------
-# Step 6: Decentralized Causal Control (constraint emission)
-# -----------------------------------------------------------------------------
 
 def step6_emit_constraints(G: nx.DiGraph, module_id: str) -> Dict[str, List[str]]:
-    """
-    For a given local module, return the upstream and downstream constraint
-    lists per FedCausal.md §7.6.
-    """
     upstream = list(G.predecessors(module_id))
     downstream = list(G.successors(module_id))
     return {
@@ -309,9 +222,6 @@ def step6_emit_constraints(G: nx.DiGraph, module_id: str) -> Dict[str, List[str]
     }
 
 
-# -----------------------------------------------------------------------------
-# Full pipeline driver
-# -----------------------------------------------------------------------------
 
 @dataclass
 class FCCResult:
@@ -342,12 +252,8 @@ def run_fedcausalcompose(modular_spec: Dict[str, Dict],
     )
 
 
-# -----------------------------------------------------------------------------
-# Self-test (no LLM)
-# -----------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    # Toy 3-module example
     spec = {
         "A": {"X_vars": ["x"], "A_vars": ["do_a"], "I_out": ["a_done"], "I_in": []},
         "B": {"X_vars": ["y"], "A_vars": ["do_b"], "I_out": ["b_done"], "I_in": ["a_done"]},

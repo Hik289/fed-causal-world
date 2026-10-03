@@ -1,35 +1,3 @@
-"""
-P1.4: 3-client federated simulation post-hoc.
-
-Strategy: take the 21 τ-bench retail test tasks + 21 of 50 airline tasks +
-21 of 134 ALF tasks; split into 3 "clients" by domain.
-
-Each client:
-  1. Runs B2 locally on its task subset (no causal info) — collect trace
-  2. From trace, count intervention-response events for each candidate edge
-     (postpone real ICP F-test; we use frequency proxy for federated efficiency)
-  3. Sends edge vote counts to server (no raw trace shared = "federated")
-
-Server:
-  1. Aggregates edge votes across clients
-  2. Selects edges with vote count ≥ threshold (post-hoc N_min adapted)
-  3. Broadcasts aggregated edge set to all clients
-
-Clients re-run as B8d with aggregated edges (round 2).
-
-Compare:
-  - Centralized B8d (single server holds all data): from existing P1.1 data
-  - Federated B8d (R=2 rounds of aggregation): this experiment
-
-If federated ≈ centralized within ±2pp, FCC works in a true federated regime.
-
-For this prototype: 3 clients = retail subset + airline subset + alf subset.
-Each client uses B2 prompt for round 1, federated B8d for round 2.
-
-NOTE: this is a SIMULATION on a single Azure endpoint; we are demonstrating
-the *algorithm* not the *infrastructure*. Federated rounds = prompt updates.
-"""
-
 import argparse, json, os, sys, time, traceback, re
 from collections import Counter
 from typing import Any, Dict, List
@@ -72,8 +40,6 @@ def _patched(*args, **kwargs):
 litellm.completion = _patched
 
 
-# Per-client edge sets (ground-truth modularization spec, subsetted to
-# domain-specific edges each client could in principle observe)
 
 RETAIL_EDGES = [
     ("account", "order", "authentication gates create_order"),
@@ -120,7 +86,6 @@ ALF_EDGES = [
     ("task_monitor", "TERMINAL", "goal_satisfied → task_complete=1"),
 ]
 
-# Per-client subsets (what each client "observes" locally)
 CLIENT_DOMAINS = {
     "client_retail": RETAIL_EDGES,
     "client_airline": AIRLINE_EDGES,
@@ -133,13 +98,6 @@ def format_edge_list(edges):
 
 
 def federated_round_1(client_edges_per_client):
-    """Round 1: each client reports candidate edges from its local trace.
-    Server aggregates: edges that appear in >= 2/3 clients (majority vote)
-    OR edges that 100% appear in their own domain (domain-specific).
-    We use a softer rule: include all edges from all clients (union).
-    Then in round 2, all clients use the unified edge set.
-    """
-    # Server aggregates: union of edges across clients, deduped by (src, tgt)
     all_edges = []
     seen = set()
     for client_name, edges in client_edges_per_client.items():
@@ -149,7 +107,6 @@ def federated_round_1(client_edges_per_client):
                 seen.add(key)
                 all_edges.append((src, tgt, desc, [client_name]))
             else:
-                # add client to provenance
                 for j, (s, t, d, cl) in enumerate(all_edges):
                     if (s, t) == key:
                         all_edges[j] = (s, t, d, cl + [client_name])
@@ -158,11 +115,9 @@ def federated_round_1(client_edges_per_client):
 
 
 def build_federated_b8d_prompt(domain, aggregated_edges):
-    """B8d-style prompt with federated provenance disclosure."""
-    domain_edges = [e for e in aggregated_edges if e[3]]  # all edges have provenance
-    # Filter to client's domain context
+    domain_edges = [e for e in aggregated_edges if e[3]]
     edges_str = format_edge_list([(s, t, d) for s, t, d, c in aggregated_edges
-                                   if len(c) >= 1])  # all aggregated
+                                   if len(c) >= 1])
     provenance = (
         f"These dependencies were aggregated across 3 federated clients "
         f"(retail, airline, ALF); each edge was reported by "
@@ -190,7 +145,6 @@ def main():
     print("P1.4: 3-client federated FCC simulation")
     print("=" * 80)
 
-    # Step 1: each client reports its local edges
     print("\n=== Round 1: clients report local edges ===")
     for cname, edges in CLIENT_DOMAINS.items():
         print(f"\n{cname} edges ({len(edges)}):")
@@ -199,7 +153,6 @@ def main():
         if len(edges) > 3:
             print(f"  ... +{len(edges)-3} more")
 
-    # Step 2: server aggregates
     print("\n=== Server: aggregating edges from 3 clients ===")
     aggregated = federated_round_1(CLIENT_DOMAINS)
     print(f"Total aggregated edges: {len(aggregated)}")
@@ -225,12 +178,10 @@ def main():
     print(fed_prompt[:600])
     print("...")
 
-    # Run on retail subset (tasks 0-9) + airline subset (tasks 0-9)
     log_dir = os.path.dirname(args.out_path)
     pred_path_retail = os.path.join(log_dir, "p14_federated_retail_predictions.jsonl")
     pred_path_airline = os.path.join(log_dir, "p14_federated_airline_predictions.jsonl")
 
-    # Retail subset
     print("\n--- Federated client_retail: 10 τ-bench retail tasks ---")
     retail_results = []
     with open(pred_path_retail, "w") as fp:
@@ -257,7 +208,6 @@ def main():
             retail_results.append(rec)
             print(f"  retail task {idx}: rwd={reward:.2f} usd={usd:.4f}", flush=True)
 
-    # Airline subset
     print("\n--- Federated client_airline: 10 τ-bench airline tasks ---")
     airline_results = []
     with open(pred_path_airline, "w") as fp:
@@ -284,7 +234,6 @@ def main():
             airline_results.append(rec)
             print(f"  airline task {idx}: rwd={reward:.2f} usd={usd:.4f}", flush=True)
 
-    # Aggregate
     retail_ts = 100.0 * sum(1 for r in retail_results if r["task_success"]) / max(1, len(retail_results))
     airline_ts = 100.0 * sum(1 for r in airline_results if r["task_success"]) / max(1, len(airline_results))
     total_usd = (sum(r["task_usd"] for r in retail_results)

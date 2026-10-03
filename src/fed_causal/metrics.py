@@ -1,19 +1,3 @@
-"""
-metrics.py — Evaluation metrics for fedcausalworld experiments.
-
-Implements (per FedCausal.md §16):
-  - Transition EM    : exact match of (module_id, event_type) prediction
-  - StateAcc         : same as Transition EM for the synthetic event-prediction
-                       task (no separate state vector in the dry-run harness;
-                       full state-vector StateAcc applies to Synthetic SCM)
-  - Edge F1, Direction Accuracy, Lag Accuracy : §16.5 structure diagnostics
-
-Reporting helpers:
-  - aggregate_per_module : per-module EM, required by EDA insight §4.2 (do NOT
-                            use global EM only — confounder bias is diluted).
-  - bootstrap_ci         : 95% bootstrap CI half-width over task list.
-"""
-
 from __future__ import annotations
 import math
 import random
@@ -26,7 +10,6 @@ def transition_em(pred: Dict[str, Any], target: Dict[str, Any]) -> int:
 
 
 def aggregate(records: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """records: list of {pred, target, task_id, benchmark, usage}."""
     if not records:
         return {"n": 0}
     em = [transition_em(r["pred"], r["target"]) for r in records]
@@ -52,7 +35,6 @@ def aggregate(records: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 def edge_f1(predicted_edges: List[Tuple[str, str]],
             true_edges: List[Tuple[str, str]]) -> Dict[str, float]:
-    """Edge F1 over (src_module, tgt_module) pairs."""
     P = set(predicted_edges)
     T = set(true_edges)
     tp = len(P & T)

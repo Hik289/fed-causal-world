@@ -1,22 +1,3 @@
-"""
-run_dry2.py — Multi-turn cost-per-task calibration (realistic).
-
-The first dry-run (run_dry.py) measured PER-CALL cost (~$0.00011/call) which
-is correct for our 1-shot next-event predictor.  But the EDA $535 budget
-projection assumes a FULL multi-turn agent (~15-30 LLM calls per task).
-
-This second dry-run simulates a multi-turn agent at minimal scale:
-  - For each task, issue N_call LLM calls (predicting next event each time,
-    with a growing event-history prefix)
-  - N_call calibrated per benchmark to match EDA mean turn counts:
-      τ-bench  : 15 calls (matches eda_report §1.1.1 mean turns)
-      ALFWorld : 30 calls (matches §2.1 mean traj length)
-      AndroidWorld: 25 calls (matches §3.1 mean traj length)
-
-Runs B2 on a tiny pool (2/2/1) to bound cost while still getting realistic
-per-task token usage including the growing context.
-"""
-
 from __future__ import annotations
 import json
 import os
@@ -31,7 +12,7 @@ from llm_client import chat, reset_counter, get_counter
 OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dry_run_out")
 
 MULTITURN_PLAN = [
-    ("tau_bench",    2, 15),   # n_tasks, n_calls/task
+    ("tau_bench",    2, 15),
     ("alfworld",     2, 30),
     ("androidworld", 1, 25),
 ]
@@ -66,12 +47,9 @@ def run_multiturn() -> Dict[str, Any]:
                 task_pt = 0
                 task_ct = 0
                 for call_i in range(n_calls):
-                    # Each call grows the visible event prefix by 1 event
                     prefix_len = min(len(task.events), max(2, call_i + 2))
                     sub_task = task
-                    # Inline truncation by slicing events
                     sub_task_events = list(task.events[:prefix_len])
-                    # Build prompt manually with truncated events
                     from baselines.base import render_event_history, render_module_list
                     from event_traces import Task as _Task
                     sub = _Task(task_id=task.task_id, benchmark=task.benchmark,
@@ -86,7 +64,7 @@ def run_multiturn() -> Dict[str, Any]:
                     ]
                     try:
                         text, usage = chat(messages, max_tokens=64, temperature=0.0)
-                    except Exception as exc:  # noqa: BLE001
+                    except Exception as exc:
                         print(f"  ERR call {call_i}: {exc}")
                         usage = {"prompt_tokens": 0, "completion_tokens": 0,
                                  "usd_estimated": 0.0}
@@ -109,7 +87,7 @@ def run_multiturn() -> Dict[str, Any]:
             avg_usd = sum(usd_per_task) / len(usd_per_task)
             n_full = FULL_EXP_TASK_COUNT[benchmark]
             proj_b2 = avg_usd * n_full
-            proj_mix = proj_b2 * 1.5  # safety factor for B0-B11 + 6-step pipeline
+            proj_mix = proj_b2 * 1.5
             extrapolated += proj_mix
             summary["per_benchmark"][benchmark] = {
                 "n_tasks": n_tasks, "n_calls_per_task": n_calls,

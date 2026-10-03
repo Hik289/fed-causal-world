@@ -1,31 +1,3 @@
-"""
-anchor4_sanity_v2.py — H0.anchor_4 Synthetic Sanity Gate (V2 with fixes).
-
-Diagnostic-driven fixes from V1:
-
-  Fix-1 (MEC resolution): generate a "rich_int" training split that intervenes
-        on EACH module 0..K-1 sequentially.  With single-module do() in V1
-        we couldn't distinguish 0->1->...->4 chain from 0->{1,2,3,4} star,
-        causing edge_f1=0.25 and B8 underfit.
-
-  Fix-2 (B10 EM ceiling): use n_bins=5 instead of 10.  With σ_local=0.05 and
-        train std~1.0, 10-bin discretization gives ~25% per-var flip rate from
-        noise alone, capping B10 at ~70% — too low for sanity gate.
-
-  Fix-3 (response detection): use lag_window=1 (strict immediate) and require
-        the response magnitude to exceed the OBSERVATIONAL-baseline dX
-        distribution's 90th percentile (not just median), so the counter is
-        not saturated by chain propagation.
-
-  Fix-4 (B8 OLS): use ridge-regularized OLS (ridge=1e-3) to avoid overfit
-        when wrong parents are picked, matching the OLS structure used by B7.
-
-This script generates rich_int data in-process (no need to modify the official
-synthetic_scm_skeleton.py beyond --force_chain).  It only reads the original
-oracle (W_self/B/W_cross/V/k_mediator) and re-simulates trajectories with rich
-interventions.
-"""
-
 from __future__ import annotations
 import argparse
 import json
@@ -37,34 +9,23 @@ from typing import Dict, List, Tuple, Any
 
 import numpy as np
 
-# Import the tracked generator so every experiment uses the same dynamics.
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
-from fed_causal.synthetic_scm_skeleton import SCMConfig, simulate  # noqa: E402
+from fed_causal.synthetic_scm_skeleton import SCMConfig, simulate
 
 
-# ----------------------------------------------------------------------
-# Load oracle + obs + re-simulate rich_int and rich_eval splits
-# ----------------------------------------------------------------------
 
 def load_npz(path):
     return dict(np.load(path, allow_pickle=False))
 
 
 def reload_cfg(oracle_cfg: Dict[str, Any]) -> SCMConfig:
-    """Reconstruct SCMConfig from oracle.pkl's config dict."""
     return SCMConfig(**{k: v for k, v in oracle_cfg.items()
                         if k in SCMConfig.__dataclass_fields__})
 
 
 def gen_rich_int_train(cfg: SCMConfig, GV_edges, params, rng,
                        T_per_module: int = 800) -> Dict[str, np.ndarray]:
-    """Generate train trajectories with do(A_k) on each module k separately.
-
-    Concatenated into one stream so the downstream matcher sees a wide variety
-    of intervention sources, resolving the K-1 interventions needed by
-    Lemma 3.
-    """
     parts = []
     masks = []
     for k_do in range(cfg.K):
@@ -82,18 +43,12 @@ def gen_rich_int_train(cfg: SCMConfig, GV_edges, params, rng,
 
 def gen_mediator_eval(cfg: SCMConfig, GV_edges, params, rng, T: int = 1500
                       ) -> Dict[str, np.ndarray]:
-    """Eval split: intervene on chain-MIDDLE module so the effect propagates
-    forward and creates a genuine joint-distribution shift the non-causal
-    global OLS cannot handle by extrapolation alone."""
     spec = {"do_module": cfg.K // 2,
             "do_value": np.ones(cfg.m_k),
             "rate": 0.40}
     return simulate(cfg, GV_edges, params, spec, rng, T)
 
 
-# ----------------------------------------------------------------------
-# Discretization (coarser: 5 bins)
-# ----------------------------------------------------------------------
 
 def fit_bin_edges(X: np.ndarray, n_bins: int = 5) -> np.ndarray:
     T, K, n = X.shape
@@ -130,9 +85,6 @@ def per_module_em(pred_d, true_d):
             for k in range(pred_d.shape[1])}
 
 
-# ----------------------------------------------------------------------
-# B10: Oracle Causal WM (uses ground-truth params)
-# ----------------------------------------------------------------------
 
 def b10_predict(X, A, oracle, K, n):
     params = oracle["mechanism_params"]
@@ -154,9 +106,6 @@ def b10_predict(X, A, oracle, K, n):
     return pred
 
 
-# ----------------------------------------------------------------------
-# B2: Global Sequence WM (joint OLS, no graph)
-# ----------------------------------------------------------------------
 
 def b2_fit_predict(X_train, A_train, X_eval, A_eval, K, n, m, ridge: float = 1e-3):
     T = X_train.shape[0]
@@ -164,10 +113,9 @@ def b2_fit_predict(X_train, A_train, X_eval, A_eval, K, n, m, ridge: float = 1e-
     At = A_train[1:].reshape(T - 1, K * m)
     Y = X_train[1:].reshape(T - 1, K * n)
     Phi = np.concatenate([Xt, At, np.ones((T - 1, 1))], axis=1)
-    # ridge regression
     A_mat = Phi.T @ Phi + ridge * np.eye(Phi.shape[1])
     B_mat = Phi.T @ Y
-    W = np.linalg.solve(A_mat, B_mat).T  # (K*n, P)
+    W = np.linalg.solve(A_mat, B_mat).T
     Te = X_eval.shape[0]
     Xe = X_eval[:-1].reshape(Te - 1, K * n)
     Ae = A_eval[1:].reshape(Te - 1, K * m)
@@ -178,28 +126,14 @@ def b2_fit_predict(X_train, A_train, X_eval, A_eval, K, n, m, ridge: float = 1e-
     return pred
 
 
-# ----------------------------------------------------------------------
-# Step 3+4 (numerical): rich-intervention edge recovery
-# ----------------------------------------------------------------------
 
 def rich_step3_step4(X_train, A_train, int_mask, X_obs_baseline, K, n,
                      lag_window: int = 1, p_verify_threshold: float = 0.50
                      ) -> Dict[str, Any]:
-    """Strict-lag response matching with calibrated threshold from non-int baseline.
-
-    Procedure:
-      - q_i := mean(int_mask[:, i])  (rich split: should be ~0.3 / K each)
-      - response detection per (t, k): dX[t, k] = ||X[t] - X[t-1]|| at module k
-      - threshold = 90th percentile of dX[no_intervention_anywhere_t, k]
-                    (per-module calibration from OBSERVATIONAL baseline)
-      - For each t where module i has do(): look at t+1 only; if dX[t+1, j]
-        > thresh[j], count N_ij[i, j] +=1.
-    """
     T = X_train.shape[0]
-    dX = np.linalg.norm(X_train[1:] - X_train[:-1], axis=2)            # (T-1, K)
-    # Calibrate threshold from obs baseline (no interventions)
-    dX_obs = np.linalg.norm(X_obs_baseline[1:] - X_obs_baseline[:-1], axis=2)  # (T_obs-1, K)
-    thresh = np.quantile(dX_obs, 0.90, axis=0)                          # (K,)
+    dX = np.linalg.norm(X_train[1:] - X_train[:-1], axis=2)
+    dX_obs = np.linalg.norm(X_obs_baseline[1:] - X_obs_baseline[:-1], axis=2)
+    thresh = np.quantile(dX_obs, 0.90, axis=0)
 
     q_hat = np.array([int_mask[:, i].mean() for i in range(K)])
 
@@ -210,7 +144,6 @@ def rich_step3_step4(X_train, A_train, int_mask, X_obs_baseline, K, n,
         for i in range(K):
             if int_mask[t, i] == 0:
                 continue
-            # strict lag = 1: look only at t+1 - t in dX is index t -> use dX[t]
             for j in range(K):
                 if i == j:
                     continue
@@ -246,9 +179,6 @@ def rich_step3_step4(X_train, A_train, int_mask, X_obs_baseline, K, n,
     }
 
 
-# ----------------------------------------------------------------------
-# Per-module ridge OLS for B7/B8
-# ----------------------------------------------------------------------
 
 def fit_per_module_ridge(X_train, A_train, parents: Dict[int, List[int]],
                          lag: int = 1, ridge: float = 1e-3) -> Dict[int, np.ndarray]:
@@ -290,7 +220,6 @@ def predict_per_module(X, A, coefs, parents, lag=1):
 
 
 def b7_candidate_edges(X_train, K, threshold=0.10) -> List[Tuple[int, int]]:
-    """B7 observational candidate: max lagged cross-correlation > threshold."""
     edges = []
     for i in range(K):
         for j in range(K):
@@ -311,9 +240,6 @@ def b7_candidate_edges(X_train, K, threshold=0.10) -> List[Tuple[int, int]]:
     return edges
 
 
-# ----------------------------------------------------------------------
-# Run single seed
-# ----------------------------------------------------------------------
 
 def run_seed(seed: int, base_data_dir: str, n_bins: int = 5) -> Dict[str, Any]:
     data_dir = os.path.join(base_data_dir, f"sanity_chain_d4_seed{seed}")
@@ -323,7 +249,6 @@ def run_seed(seed: int, base_data_dir: str, n_bins: int = 5) -> Dict[str, Any]:
     cfg = reload_cfg(oracle["config"])
     K, n, m = cfg.K, cfg.n_k, cfg.m_k
 
-    # === Generate rich-int train + mediator-int eval splits ===
     rng = np.random.default_rng(seed * 31 + 17)
     rich = gen_rich_int_train(cfg, oracle["GV_edges"],
                               oracle["mechanism_params"], rng, T_per_module=800)
@@ -336,19 +261,15 @@ def run_seed(seed: int, base_data_dir: str, n_bins: int = 5) -> Dict[str, Any]:
     X_eval = eval_split["X"]
     A_eval = eval_split["A"]
 
-    # Bin edges fit on train obs (B2/B7/B8 trained on this).
     edges = fit_bin_edges(X_train, n_bins=n_bins)
     true_disc = discretize(X_eval, edges)
 
-    # --- B10 Oracle ---
     pred_b10 = b10_predict(X_eval, A_eval, oracle, K, n)
     em_b10 = transition_em(discretize(pred_b10, edges), true_disc)
 
-    # --- B2 Global Sequence WM ---
     pred_b2 = b2_fit_predict(X_train, A_train, X_eval, A_eval, K, n, m)
     em_b2 = transition_em(discretize(pred_b2, edges), true_disc)
 
-    # --- B7 (observational candidate edges) ---
     cand_obs = b7_candidate_edges(X_train, K, threshold=0.10)
     parents_b7 = {k: [] for k in range(K)}
     for (i, j) in cand_obs:
@@ -357,7 +278,6 @@ def run_seed(seed: int, base_data_dir: str, n_bins: int = 5) -> Dict[str, Any]:
     pred_b7 = predict_per_module(X_eval, A_eval, coefs_b7, parents_b7, lag=1)
     em_b7 = transition_em(discretize(pred_b7, edges), true_disc)
 
-    # --- B8 FedCausalCompose using rich_int + lag=1 strict ---
     matcher = rich_step3_step4(rich["X"], rich["A"],
                                rich["intervention_mask"], X_train, K, n,
                                lag_window=1, p_verify_threshold=0.50)
@@ -368,7 +288,6 @@ def run_seed(seed: int, base_data_dir: str, n_bins: int = 5) -> Dict[str, Any]:
     pred_b8 = predict_per_module(X_eval, A_eval, coefs_b8, parents_b8, lag=1)
     em_b8 = transition_em(discretize(pred_b8, edges), true_disc)
 
-    # Theorem 2 trackers
     q_pos = [q for q in matcher["q_hat"] if q > 0]
     r_pos = [r for r in matcher["r_hat"] if r > 0]
     q_min = min(q_pos) if q_pos else 0.0

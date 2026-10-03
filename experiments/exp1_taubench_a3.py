@@ -1,22 +1,3 @@
-"""
-exp1_taubench_a3.py — A3 ablation per user 派单 (2026-06-21 18:21 JST).
-
-H0.method_Exp1_taubench_prompt_fix: B10-style annotated edges + drop
-BLOCK/INSPECT/VERIFY constraint verbs lets B8 reach B2 + 5pp on τ-bench.
-
-A3 baseline: B8c_AnnotatedNoConstraint
-  - Keep modular spec summary
-  - Keep PREDICT (B10 also has it)
-  - Replace bare arrows with B10-style natural-language annotations
-    ("account→order (auth gates create_order)" etc.)
-  - REMOVE: INSPECT, BLOCK, VERIFY, "violates global causal constraints",
-    "intervention-response matching with high confidence"
-  - Reuse anchor_1/exp1_taubench harness (prompt-modulation of ToolCallingAgent)
-
-Default: 5-task pilot (idx 0-4). If gate B8c-B2 >= +5pp, escalate to 21-task
-full (idx 0-20, same as main τ-bench table) for controlled comparison.
-"""
-
 from __future__ import annotations
 import json
 import os
@@ -25,7 +6,6 @@ import time
 import traceback
 from typing import Any, Dict, List
 
-# API configuration is read from the environment.
 AZURE_API_KEY = os.environ.get("FED_CAUSAL_API_KEY") or os.environ.get("OPENAI_API_KEY")
 AZURE_API_BASE = os.environ.get("FED_CAUSAL_API_BASE_URL") or os.environ.get("OPENAI_BASE_URL")
 MODEL_NAME = os.environ.get("FED_CAUSAL_MODEL", "openai/gpt-5.4-mini")
@@ -69,12 +49,7 @@ def _patched_completion(*args, **kwargs):
 litellm.completion = _patched_completion
 
 
-# ============================================================================
-# A3 prompt: B10-style annotated edges, B8 control framing (NO BLOCK/INSPECT)
-# ============================================================================
 
-# Same edge set as B8 / B10 (12 + 2 = 14 ground-truth retail edges per
-# modularization_spec §1.3), but rendered with B10-style annotations.
 ANNOTATED_EDGES_RETAIL = (
     "Cross-module causal edges (each with operational meaning): "
     "account→order (authentication gates create_order), "
@@ -104,15 +79,9 @@ BASELINE_HEADERS_A3 = {
         "executing each tool call. The graph was validated by federated "
         "intervention-response matching."
     ),
-    # Also include B2 and B10 references for controlled comparison;
-    # we will NOT rerun B2/B10 (already have 21-task data) unless user asks.
-    # But include identical prompt definitions so we could re-run if needed.
 }
 
 
-# ============================================================================
-# Custom agent (same wrapper as exp1_taubench.py)
-# ============================================================================
 
 from tau_bench.envs.retail.env import MockRetailDomainEnv
 from tau_bench.agents.tool_calling_agent import ToolCallingAgent
@@ -229,13 +198,11 @@ def main():
         "cumulative_usd": cumulative_usd,
         "per_baseline": all_results,
     }
-    # Compare against main τ-bench data (B2 = 33.33%, B10 = 52.38% on full 21)
     if "B8c_AnnotatedNoConstraint" in all_results:
         b8c = all_results["B8c_AnnotatedNoConstraint"]["task_success_rate_pp"]
-        # subset comparison: pull B2/B10 perf on same task_indices
         summary["A3_gate"] = {
             "B8c_TS_pp": b8c,
-            "B8c_minus_B2_main_pp": round(b8c - 33.33, 2),  # main B2 on full 21
+            "B8c_minus_B2_main_pp": round(b8c - 33.33, 2),
             "B8c_minus_B10_main_pp": round(b8c - 52.38, 2),
             "G1_5pp_pass": (b8c - 33.33) >= 5.0,
         }

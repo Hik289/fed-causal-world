@@ -1,12 +1,3 @@
-"""
-Compact bundle of B0/B1/B3-B11 baselines.  Each is a small class that builds
-a different prompt (or applies a different graph constraint) and otherwise
-shares the BaselineBase.predict_next_event.
-
-These are NOT executed in the dry-run (user's spec: B2 only for cost
-calibration).  They are tested for prompt construction only.
-"""
-
 from typing import List, Tuple
 from .base import BaselineBase, render_event_history, render_module_list
 from event_traces import Task
@@ -16,7 +7,6 @@ class B0_NoWM(BaselineBase):
     name = "B0_NoWM"
 
     def build_prompt(self, task: Task) -> str:
-        # No world model: just last event + module roster -> pure heuristic
         modules = render_module_list(task)
         last = task.events[-1] if task.events else None
         last_str = f"{last.module_id}.{last.event_type}" if last else "<none>"
@@ -28,7 +18,6 @@ class B1_LocalWM(BaselineBase):
     name = "B1_LocalWM"
 
     def build_prompt(self, task: Task) -> str:
-        # Only show events from the most-recent active module
         if not task.events:
             return ("Predict next event. JSON: {\"module_id\":...,\"event_type\":...}")
         active = task.events[-1].module_id
@@ -44,7 +33,6 @@ class B3_GlobalTransitionGraph(BaselineBase):
     name = "B3_GlobalTransitionGraph"
 
     def build_prompt(self, task: Task) -> str:
-        # Show recent (state, action) -> next_state transitions explicitly
         h = render_event_history(task, max_events=30)
         return (f"Global transition graph over modular events:\n{h}\n\n"
                 f"Predict next event from learned transition patterns.\n"
@@ -82,7 +70,6 @@ class B6_InvariantWM(BaselineBase):
 
 
 class B7_CausalWMNoInt(BaselineBase):
-    """Causal world model using only observational candidate edges (no intervention validation)."""
     name = "B7_CausalWMNoInt"
     is_causal = True
     needs_intervention_data = False
@@ -109,7 +96,6 @@ class B7_CausalWMNoInt(BaselineBase):
 
 
 class B8_FedCausalCompose(BaselineBase):
-    """Full 6-step FedCausalCompose pipeline."""
     name = "B8_FedCausalCompose"
     is_causal = True
     needs_intervention_data = True
@@ -138,19 +124,16 @@ class B8_FedCausalCompose(BaselineBase):
 
 
 class B9_FCCNoControl(B8_FedCausalCompose):
-    """FedCausalCompose without the decentralized causal control prompt clause."""
     name = "B9_FCCNoControl"
 
     def build_prompt(self, task: Task) -> str:
         p = super().build_prompt(task)
-        # drop the control constraint sentence
         return p.replace(
             "Apply causal rollout. Constraint: downstream module's incoming must be "
             "justified by an upstream outgoing per the validated graph.\n", "")
 
 
 class B10_OracleCausalWM(BaselineBase):
-    """Oracle: feed ground-truth edges directly into the causal world model prompt."""
     name = "B10_OracleCausalWM"
     is_causal = True
 
@@ -164,11 +147,9 @@ class B10_OracleCausalWM(BaselineBase):
 
 
 class B11_CentralizedSeq(BaselineBase):
-    """Centralized detailed sequence upper bound — full payloads visible."""
     name = "B11_CentralizedSeq"
 
     def build_prompt(self, task: Task) -> str:
-        # Show ALL events including payload (~3x context vs B2)
         lines = []
         for ev in task.events:
             marker = "[do]" if ev.intervention_id else "    "

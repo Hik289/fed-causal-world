@@ -1,21 +1,3 @@
-"""
-synthetic_scm_skeleton.py — Modular SCM data generator for fedcausalworld.
-
-Pure numpy / scipy / networkx. NO LLM calls. NO secrets. NO env reads.
-
-Conforms to:
-  - insight.md Assumption 1 (Modular SCM with independent U_k)
-  - insight.md Assumption 2 (unblockable back-door path when gamma > 0)
-  - modularization_spec.md schema (X_k disjoint, 6 modules, ground-truth edges)
-  - synthetic_scm_design.md §5 (this is the executable companion)
-
-Outputs (saved as .npz under data/synthetic/<config_id>/ by engineer):
-  - X_obs, A_obs, X_int, A_int, intervention_mask
-  - oracle_GM, oracle_GV (with lag), mechanism_params
-
-Maintainer: anonymous artifact authors, 2026-06-19 JST
-"""
-
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
 import argparse
@@ -27,9 +9,6 @@ import numpy as np
 import networkx as nx
 
 
-# -----------------------------------------------------------------------------
-# 1. Configuration
-# -----------------------------------------------------------------------------
 
 @dataclass
 class SCMConfig:
@@ -47,19 +26,13 @@ class SCMConfig:
     T_train: int = 5000
     T_eval: int = 2000
     seed: int = 0
-    # EDA A3 fix: force_chain enforces chain 0->1->...->chain_depth
-    # so measured path depth equals chain_depth (random DAG with rho=0.3
-    # only gives depth ~2, see eda_report.md §6.3).
     force_chain: bool = False
     chain_depth: int = 4
     chain_side_prob: float = 0.0
     confound_action: bool = False
-    gamma_A: float = 0.0     # strength of U_conf -> A coupling (0 = original behavior)
+    gamma_A: float = 0.0
 
 
-# -----------------------------------------------------------------------------
-# 2. Graph construction
-# -----------------------------------------------------------------------------
 
 def build_module_graph(cfg: SCMConfig, rng: np.random.Generator) -> nx.DiGraph:
     G = nx.DiGraph()
@@ -70,18 +43,14 @@ def build_module_graph(cfg: SCMConfig, rng: np.random.Generator) -> nx.DiGraph:
         cd = max(1, min(cd, cfg.K - 1))
         for i in range(cd):
             G.add_edge(i, i + 1)
-        # add a sparse random side-edge (i -> i+2) with low prob to enrich
-        # graph beyond pure chain, but only if it does not exceed cd path-len.
         side_p = getattr(cfg, "chain_side_prob", 0.0)
         if side_p > 0.0:
             for i in range(cd - 1):
                 if rng.random() < side_p:
                     G.add_edge(i, i + 2)
-            # Trim if side-edges accidentally lengthen path (shouldn't, but safe)
             while nx.is_directed_acyclic_graph(G) \
                     and nx.dag_longest_path_length(G) > cd:
                 bet = nx.edge_betweenness_centrality(G)
-                # prefer removing side edges, not chain edges
                 side_edges = [e for e in G.edges if e[1] - e[0] != 1]
                 if side_edges:
                     worst = max(side_edges, key=lambda e: bet.get(e, 0))
@@ -95,14 +64,12 @@ def build_module_graph(cfg: SCMConfig, rng: np.random.Generator) -> nx.DiGraph:
             if rng.random() < cfg.rho:
                 G.add_edge(i, j)
 
-    # Trim edges to enforce max longest-path length <= d
     while len(G.edges) > 0 and nx.is_directed_acyclic_graph(G) \
             and nx.dag_longest_path_length(G) > cfg.d:
         bet = nx.edge_betweenness_centrality(G)
         worst = max(bet, key=bet.get)
         G.remove_edge(*worst)
 
-    # Ensure at least one cross-module edge (Assumption 1: |E_M^*| >= 1)
     if len(G.edges) == 0:
         G.add_edge(0, 1)
     return G
@@ -120,9 +87,6 @@ def build_variable_edges(cfg: SCMConfig, GM: nx.DiGraph,
     return edges
 
 
-# -----------------------------------------------------------------------------
-# 3. Mechanism parameter sampling
-# -----------------------------------------------------------------------------
 
 def sample_mechanism_params(cfg: SCMConfig, GM: nx.DiGraph,
                             GV_edges: List[Tuple[int, int, int, int, int]],
@@ -149,9 +113,6 @@ def sample_mechanism_params(cfg: SCMConfig, GM: nx.DiGraph,
         else:
             params["V"].append(np.zeros((cfg.n_k, cfg.d_conf)))
 
-    # V_A: action-confounder loading per module. Same modules selected by
-    # `chosen` get nonzero V_A (mirrors V structure so confounder enters both
-    # X and A through SAME modules -> creates X <- U_conf -> A backdoor).
     params["V_A"] = []
     for k in range(cfg.K):
         if k in chosen:
@@ -162,9 +123,6 @@ def sample_mechanism_params(cfg: SCMConfig, GM: nx.DiGraph,
     return params
 
 
-# -----------------------------------------------------------------------------
-# 4. Trajectory simulation
-# -----------------------------------------------------------------------------
 
 def simulate(cfg: SCMConfig, GV_edges, params,
              intervention_spec: Dict, rng: np.random.Generator,
@@ -191,31 +149,26 @@ def simulate(cfg: SCMConfig, GV_edges, params,
     confound_action = bool(getattr(cfg, "confound_action", False))
     gamma_A = float(getattr(cfg, "gamma_A", 0.0))
     if confound_action and gamma_A > 0:
-        # logit(pi) is the base; add per-module per-action-dim shift from V_A @ U_conf
         eps = 1e-6
         pi_clipped = float(np.clip(pi, eps, 1 - eps))
         logit_pi = np.log(pi_clipped / (1.0 - pi_clipped))
 
     for t in range(L, T + L):
-        # Sample actions
         if confound_action and gamma_A > 0:
-            # A[t, k, q] ~ Bernoulli(sigmoid(logit_pi + gamma_A * (V_A_k @ U_conf[t])[q]))
             probs = np.empty((K, m))
             for k in range(K):
-                shift = params["V_A"][k] @ U_conf[t]   # (m,)
+                shift = params["V_A"][k] @ U_conf[t]
                 probs[k] = _sigmoid(logit_pi + gamma_A * shift)
             A[t] = (rng.random(size=(K, m)) < probs).astype(float)
         else:
             A[t] = (rng.random(size=(K, m)) < pi).astype(float)
 
-        # Module-level do() injection
         if "do_module" in intervention_spec \
                 and rng.random() < intervention_spec.get("rate", 0.10):
             k_do = intervention_spec["do_module"]
             A[t, k_do] = intervention_spec["do_value"]
             int_mask[t - L, k_do] = 1
 
-        # Update each module
         for k in range(K):
             x_next = params["W_self"][k] @ X[t - 1, k] + params["B"][k] @ A[t, k]
 
@@ -246,9 +199,6 @@ def simulate(cfg: SCMConfig, GV_edges, params,
     }
 
 
-# -----------------------------------------------------------------------------
-# 5. Split generation
-# -----------------------------------------------------------------------------
 
 def generate_all_splits(cfg: SCMConfig) -> Dict[str, Dict]:
     rng = np.random.default_rng(cfg.seed)
@@ -286,23 +236,17 @@ def generate_all_splits(cfg: SCMConfig) -> Dict[str, Dict]:
     return {"splits": splits, "oracle": oracle, "GM_edges": list(GM.edges)}
 
 
-# -----------------------------------------------------------------------------
-# 6. Sanity checks (run before saving)
-# -----------------------------------------------------------------------------
 
 def sanity_check(cfg: SCMConfig, out: Dict) -> Dict:
     GM_adj = out["oracle"]["GM_adj"]
     K = cfg.K
     checks = {}
 
-    # 1. DAG
     G = nx.from_numpy_array(GM_adj, create_using=nx.DiGraph)
     checks["is_dag"] = bool(nx.is_directed_acyclic_graph(G))
 
-    # 2. At least one cross-module edge (Assumption 1)
     checks["has_cross_module_edge"] = bool(GM_adj.sum() >= 1)
 
-    # 3. Longest path within budget
     if checks["is_dag"] and GM_adj.sum() > 0:
         checks["max_path_len"] = int(nx.dag_longest_path_length(G))
         checks["depth_within_budget"] = checks["max_path_len"] <= cfg.d
@@ -310,21 +254,17 @@ def sanity_check(cfg: SCMConfig, out: Dict) -> Dict:
         checks["max_path_len"] = 0
         checks["depth_within_budget"] = True
 
-    # 4. At least 2 modules have nonzero V_k when gamma > 0 (Assumption 2)
     nonzero_V = sum(1 for V in out["oracle"]["mechanism_params"]["V"]
                     if np.linalg.norm(V) > 0)
     checks["assumption_2_ok"] = (cfg.gamma == 0.0) or (nonzero_V >= 2)
     checks["nonzero_V_count"] = nonzero_V
 
-    # 5. Local noise independence (empirical residual check on obs split)
     X = out["splits"]["obs"]["X"]
-    # Residual = X[t+1] - W_self @ X[t] (approx) — use raw diff for quick check
     dX = X[1:] - X[:-1]
     flat = dX.reshape(dX.shape[0], -1)
     if flat.shape[1] >= 2:
         C = np.corrcoef(flat.T)
         np.fill_diagonal(C, 0.0)
-        # Group by module
         max_inter_mod = 0.0
         for ki in range(K):
             for kj in range(K):
@@ -332,16 +272,11 @@ def sanity_check(cfg: SCMConfig, out: Dict) -> Dict:
                     continue
                 block = C[ki*cfg.n_k:(ki+1)*cfg.n_k, kj*cfg.n_k:(kj+1)*cfg.n_k]
                 max_inter_mod = max(max_inter_mod, float(np.max(np.abs(block))))
-        # Inter-module correlation reflects the true cross-module signals,
-        # so we don't require it to be small. Just report.
         checks["max_inter_module_corr"] = max_inter_mod
 
     return checks
 
 
-# -----------------------------------------------------------------------------
-# 7. CLI
-# -----------------------------------------------------------------------------
 
 def main():
     parser = argparse.ArgumentParser(description="Synthetic Modular SCM generator")
@@ -360,14 +295,12 @@ def main():
     parser.add_argument("--T_train", type=int, default=5000)
     parser.add_argument("--T_eval", type=int, default=2000)
     parser.add_argument("--seed", type=int, default=0)
-    # EDA A3: force_chain mode for Exp6 depth scan
     parser.add_argument("--force_chain", action="store_true",
                         help="Force chain DAG 0->1->...->chain_depth; required for Exp6 depth scan (EDA A3)")
     parser.add_argument("--chain_depth", type=int, default=4,
                         help="Chain length when --force_chain (path depth = chain_depth)")
     parser.add_argument("--chain_side_prob", type=float, default=0.0,
                         help="Optional probability of side-edge (i -> i+2) when --force_chain")
-    # anchor_4_scm_fix: confound_action makes U_conf influence both X and A
     parser.add_argument("--confound_action", action="store_true",
                         help="Backdoor: U_conf -> A as well as U_conf -> X (hypothesis.md Assumption 2 full)")
     parser.add_argument("--gamma_A", type=float, default=0.0,

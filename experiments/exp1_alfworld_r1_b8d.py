@@ -1,23 +1,3 @@
-"""
-exp1_alfworld_r1_b8d.py — R1: rerun ALF full 134 task with A4-style B8d prompt.
-
-Per specification (2026-06-21 11:18 UTC R1):
-  - Apply A4 framing (annotated edges, drop "causal/validated/FedCausalCompose"
-    anchor) to ALF B8 prompt.
-  - Full 134 valid_unseen tasks, max_steps=50, single process (no parallel
-    contention since 1 baseline).
-  - Predict B8d ≥ B2 + 5pp on ALF (vs main B8 +4.79pp edge).
-
-ALF B8 main was: "WORLD MODEL: FedCausalCompose — full causal graph + control"
-+ "For each action: INSPECT upstream prereqs ... PREDICT downstream effects,
-BLOCK invalid actions"
-→ TS = 33.96% (partial n=53, vs B2 +4.79pp edge)
-
-ALF B8d (R1): "OPERATIONAL DEPENDENCIES across the 6 modules of ALFWorld:
-<annotated edges>" + "Use the dependency list above to anticipate downstream
-effects".  Same harness (max_steps=50, 2 few-shot, search hints).
-"""
-
 from __future__ import annotations
 import json
 import os
@@ -28,7 +8,6 @@ import traceback
 import yaml
 from typing import Any, Dict, List
 
-# API configuration is read from the environment.
 AZURE_API_KEY = os.environ.get("FED_CAUSAL_API_KEY") or os.environ.get("OPENAI_API_KEY")
 AZURE_API_BASE = os.environ.get("FED_CAUSAL_API_BASE_URL") or os.environ.get("OPENAI_BASE_URL")
 MODEL_NAME = os.environ.get("FED_CAUSAL_MODEL", "openai/gpt-5.4-mini")
@@ -71,7 +50,6 @@ def _patched_completion(*args, **kwargs):
 litellm.completion = _patched_completion
 
 
-# ALF 10 annotated cross-module edges (from modularization_spec §2.3)
 ANNOTATED_EDGES_ALF = (
     "navigation→container_access (agent_at unlocks visible_inside of receptacle), "
     "container_access→object_manipulation (container_opened enables pick of contents), "
@@ -100,7 +78,6 @@ BASELINE_HEADERS_R1 = {
 }
 
 
-# Search hints (same as v3 — applies to ALL ALF runs to fix grounding bias)
 SEARCH_HINTS = """SEARCH STRATEGY (important!):
 - Items are usually on COUNTERTOPS, in DRAWERS, on SHELVES, on STOVEBURNERS,
   or already in the SINKBASIN. Search these FIRST.
@@ -113,7 +90,6 @@ CRITICAL: do NOT close a container after finding what you need is elsewhere —
 just walk away. Save steps.
 """
 
-# Two-shot demos (same as v3) — keeps the search-strategy prior
 FEWSHOT_DEMO = """=== EXAMPLE 1: heat task ===
 Observation: -= Welcome to TextWorld, ALFRED! =-
 You see a cabinet 1, a countertop 1, a fridge 1, a microwave 1, a sinkbasin 1.

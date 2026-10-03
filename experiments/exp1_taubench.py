@@ -1,35 +1,3 @@
-"""
-exp1_taubench.py — Exp1 on vanilla τ-bench retail, 9 baselines × 21 tasks × 1 seed.
-
-Implementation strategy: PROMPT-MODULATION OF B2 anchor_1 HARNESS.
-
-  anchor_1 worked: ToolCallingAgent + LLM user simulator on τ-bench retail.
-  All baselines (B0/B1/B2/B3/B4/B5/B7/B8/B10) share the same tool-calling
-  scaffolding, differing ONLY in the system-prompt header prepended to the
-  env.wiki.  This keeps the implementation honest:
-   - All baselines see the same tools, same user, same reward
-   - The only thing that changes is the WORLD-MODEL framing in the prompt
-   - This is exactly what exp_design.md §1 specified
-
-Baseline prompt-headers (per exp_design.md §1):
-  B0 No WM         : "Do not build a world model. Act greedily."
-  B1 Local WM      : "Maintain a LOCAL world model per module only."
-  B2 Global Seq WM : "Maintain a GLOBAL SEQUENCE world model over events."
-  B3 Transition Graph
-  B4 Correlation WM
-  B5 Temporal WM
-  B7 Causal-no-int : "Causal graph from observational data, no interventions"
-  B8 FedCausalCompose: full causal + decentralized control
-  B10 Oracle Causal: ground-truth causal graph + control
-
-Note: specification listed B0/B1/B2/B3/B4/B5/B7/B10 (8 baseline). PASS criterion
-"B8 vs B2 ≥ +5pp" requires B8 to also be present. I add B8 → 9 baselines total
-(flagged in completion report for user awareness).
-
-Modular awareness: per user, modularization_spec.md 6-module decomposition
-is fed to B8 only (the only baseline that explicitly reasons about modules).
-"""
-
 from __future__ import annotations
 import json
 import os
@@ -38,7 +6,6 @@ import time
 import traceback
 from typing import Any, Dict, List
 
-# === API config: INLINE CREDS (file is .gitignored) ===
 AZURE_API_KEY = os.environ.get("FED_CAUSAL_API_KEY") or os.environ.get("OPENAI_API_KEY")
 AZURE_API_BASE = os.environ.get("FED_CAUSAL_API_BASE_URL") or os.environ.get("OPENAI_BASE_URL")
 MODEL_NAME = os.environ.get("FED_CAUSAL_MODEL", "openai/gpt-5.4-mini")
@@ -48,9 +15,6 @@ PRICE_INPUT_PER_1M = 0.25
 PRICE_OUTPUT_PER_1M = 2.00
 
 
-# ---------------------------------------------------------------------------
-# Patch litellm.completion: inject Azure creds + force model on every call
-# ---------------------------------------------------------------------------
 
 import litellm
 
@@ -88,9 +52,6 @@ def _patched_completion(*args, **kwargs):
 litellm.completion = _patched_completion
 
 
-# ---------------------------------------------------------------------------
-# Baseline-specific prompt headers (prepended to env.wiki for ToolCallingAgent)
-# ---------------------------------------------------------------------------
 
 MODULARIZATION_SUMMARY = (
     "The retail system has 6 functional modules: account, order, payment, "
@@ -174,9 +135,6 @@ BASELINE_HEADERS = {
 }
 
 
-# ---------------------------------------------------------------------------
-# Custom agent: wrap ToolCallingAgent with prompt-header prepend
-# ---------------------------------------------------------------------------
 
 from tau_bench.envs.retail.env import MockRetailDomainEnv
 from tau_bench.agents.tool_calling_agent import ToolCallingAgent
@@ -184,20 +142,13 @@ from tau_bench.envs.user import UserStrategy
 
 
 class PromptHeaderAgent(ToolCallingAgent):
-    """Identical to ToolCallingAgent but prepends a baseline-specific
-    instruction block to the env.wiki (system prompt)."""
 
     def __init__(self, header: str, *args, **kwargs):
-        # store header BEFORE super().__init__ in case wiki accessed early
         self._baseline_header = header
         super().__init__(*args, **kwargs)
-        # rewrite the wiki to include the header
         self.wiki = f"{header}\n\n---\n\n{self.wiki}"
 
 
-# ---------------------------------------------------------------------------
-# Per-baseline runner
-# ---------------------------------------------------------------------------
 
 def run_one_baseline(baseline_id: str, task_indices: List[int],
                      log_dir: str) -> Dict[str, Any]:
@@ -332,7 +283,6 @@ def main():
         "per_baseline": all_results,
     }
 
-    # Compute G1 gap (B8 vs B2)
     if "B8_FedCausalCompose" in all_results and "B2_GlobalSeqWM" in all_results:
         b8_ts = all_results["B8_FedCausalCompose"].get("task_success_rate_pp")
         b2_ts = all_results["B2_GlobalSeqWM"].get("task_success_rate_pp")

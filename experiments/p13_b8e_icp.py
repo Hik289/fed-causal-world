@@ -1,16 +1,3 @@
-"""
-P1.3: B8e = B8d + "These 14 edges were validated by ICP F-test on N=120
-intervention-response matched events with P_verify ≥ 0.95" framing.
-
-Goal: test if making the ICP-validation provenance EXPLICIT in the prompt
-moves B8d performance. If B8e > B8d significantly, the "intervention
-validation" component is contributing. If equal, anchor_4 finding stands
-(annotation alone matters; framing word for validation source doesn't move
-the agent).
-
-Same harness as P1.1 (τ-bench retail × 21 × 3 seeds).
-"""
-
 import argparse, json, os, sys, time, traceback
 from typing import Any, Dict, List
 import numpy as np

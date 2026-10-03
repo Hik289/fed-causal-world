@@ -1,22 +1,3 @@
-"""
-run_dry.py — 5+5+2 task dry-run cost calibration.
-
-Per experiment design dispatch:
-  - τ-bench retail × 5 tasks
-  - ALFWorld    × 5 tasks
-  - AndroidWorld× 2 tasks
-  - Baseline: B2 (Global Sequence WM, cheapest)
-  - Goal: measure real Azure GPT-5.4-mini cost/task → extrapolate to full
-    8-experiment budget, compare to EDA A4 $535 estimate.
-
-Outputs:
-  - dry_run_out/predictions.jsonl    (one line per task)
-  - dry_run_out/summary.json         (per-benchmark + global stats)
-
-If total dry-run cost extrapolates above $500 budget cap, exit 2 (the runner will
-escalate to User).
-"""
-
 from __future__ import annotations
 import json
 import os
@@ -40,14 +21,10 @@ DRY_RUN_PLAN = [
     ("androidworld", 2),
 ]
 
-# Full experiment volume estimate (matches EDA §8 #7 + hypothesis.md
-# cost_estimate summing).
 FULL_EXP_TASK_COUNT = {
-    # benchmark -> (n_tasks per main eval, total baseline-seed-runs over Exp1-8)
-    # See exp_design.md §6 for derivation.
-    "tau_bench":    21 * 3 * 12,    # 21 test tasks × 3 seeds × 12 baselines
-    "alfworld":     268 * 3 * 12,   # ALFWorld unseen
-    "androidworld": 12 * 3 * 12,    # 12 test tasks × 3 seeds × 12 baselines
+    "tau_bench":    21 * 3 * 12,
+    "alfworld":     268 * 3 * 12,
+    "androidworld": 12 * 3 * 12,
 }
 
 BUDGET_FLOOR_USD = 300.0
@@ -74,7 +51,7 @@ def run_dry() -> Dict[str, Any]:
                 t0 = time.time()
                 try:
                     pred, usage = baseline.predict_next_event(task, max_output_tokens=64)
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:
                     print(f"  ERR {task.task_id}: {exc}")
                     pred = {"module_id": None, "event_type": None, "error": str(exc)}
                     usage = {"prompt_tokens": 0, "completion_tokens": 0,
@@ -104,7 +81,6 @@ def run_dry() -> Dict[str, Any]:
     total_elapsed = time.time() - t_start
     counter = get_counter()
 
-    # Per-benchmark aggregate + extrapolation
     summary = {
         "dry_run_plan": DRY_RUN_PLAN,
         "total_elapsed_s": total_elapsed,

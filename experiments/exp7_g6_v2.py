@@ -1,12 +1,3 @@
-"""
-exp7_g6_v2.py — Fix G6: use B10 with proper U_conf, vary d/α/γ, compute Spearman ρ.
-
-Fix vs v1: b10_predict_with_conf uses U_conf from eval split (consistent with
-anchor_4 V9). Without U_conf, B10 doesn't actually beat B2 on confshift (V9 finding).
-
-Also implements G7 with the same B10_with_conf reference for ICP edge recovery.
-"""
-
 from __future__ import annotations
 import argparse
 import json
@@ -20,11 +11,11 @@ import numpy as np
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO_ROOT)
 sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
-from experiments import anchor4_sanity_v2 as v2                              # noqa: E402
-from experiments import anchor4_v5_icp as v5                                 # noqa: E402
-from experiments import anchor4_v6_unseen as v6                              # noqa: E402
-from experiments import anchor4_v9_b10fix as v9                              # noqa: E402
-from fed_causal.synthetic_scm_skeleton import (                              # noqa: E402
+from experiments import anchor4_sanity_v2 as v2
+from experiments import anchor4_v5_icp as v5
+from experiments import anchor4_v6_unseen as v6
+from experiments import anchor4_v9_b10fix as v9
+from fed_causal.synthetic_scm_skeleton import (
     SCMConfig,
     generate_all_splits,
     simulate,
@@ -33,8 +24,6 @@ from fed_causal.synthetic_scm_skeleton import (                              # n
 
 def gen_and_eval_v9_style(K, chain_depth, alpha, gamma, gamma_A, lag_mean=0,
                           sigma=0.10, T_train=3000, T_eval=1500, seed=0):
-    """Generate SCM (with confound_action), eval B2 and B10-with-U_conf
-    on confshift split. Returns Δ_causal = B2_MSE - B10_MSE."""
     cfg = SCMConfig(
         K=K, n_k=4, m_k=2, rho=0.0, d=chain_depth,
         alpha=alpha, lag_mean=lag_mean, gamma=gamma, sigma=sigma,
@@ -51,16 +40,14 @@ def gen_and_eval_v9_style(K, chain_depth, alpha, gamma, gamma_A, lag_mean=0,
     X_train, A_train = obs["X"], obs["A"]
     X_eval, A_eval, U_eval = ev_cs["X"], ev_cs["A"], ev_cs["U_conf"]
 
-    # B10 WITH U_conf (proper oracle)
     pred_b10 = v9.b10_predict_with_conf(X_eval, A_eval, U_eval, oracle, K, cfg.n_k)
-    # B2 (K-block OLS)
     pred_b2 = v2.b2_fit_predict(X_train, A_train, X_eval, A_eval, K, cfg.n_k, cfg.m_k)
     b10_mse = v5.cont_mse(pred_b10, X_eval)
     b2_mse = v5.cont_mse(pred_b2, X_eval)
     return {
         "K": K, "chain_depth": chain_depth, "alpha": alpha, "gamma": gamma,
         "B2_MSE": round(b2_mse, 3), "B10_MSE": round(b10_mse, 3),
-        "delta_causal_MSE": round(b2_mse - b10_mse, 3),  # positive = causal wins
+        "delta_causal_MSE": round(b2_mse - b10_mse, 3),
     }
 
 
@@ -86,7 +73,6 @@ def main():
     print("G6 v2: B10 with proper U_conf")
     print("=" * 90)
 
-    # Sweep depth d
     print("\n=== G6 sweep: depth d ===")
     d_values = [1, 2, 3, 4, 6, 8]
     d_runs = []
@@ -99,7 +85,6 @@ def main():
     rho_d = spearman_rho(d_values, [r['delta_causal_MSE'] for r in d_runs])
     print(f"  Spearman ρ(d → Δ_causal_MSE) = {rho_d:+.3f}")
 
-    # Sweep alpha
     print("\n=== G6 sweep: effect strength α ===")
     alpha_values = [0.0, 0.25, 0.5, 0.75, 1.0]
     a_runs = []
@@ -111,7 +96,6 @@ def main():
     rho_a = spearman_rho(alpha_values, [r['delta_causal_MSE'] for r in a_runs])
     print(f"  Spearman ρ(α → Δ_causal_MSE) = {rho_a:+.3f}")
 
-    # Sweep gamma
     print("\n=== G6 sweep: confounding γ ===")
     gamma_values = [0.0, 0.25, 0.5, 0.75, 1.0]
     g_runs = []

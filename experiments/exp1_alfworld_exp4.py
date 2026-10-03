@@ -1,21 +1,3 @@
-"""
-exp1_alfworld_exp4.py — Exp4 (W2 D4-5) on ALF for missing baselines + B9.
-
-Includes:
-  - B0/B1/B2/B3/B4/B5 with their original prompts (no causal info) — full 134
-  - B7d (A4 framing, obs-only annotation) — full 134
-  - B9_AnnotatedNoFramingNoControl (B8d minus "anticipate downstream effects"
-    suggestion = causal info present but no control hint)
-  - B10d_AnnotatedNoFraming_Oracle (B10 with A4-style sanity)
-
-Already done (don't re-run):
-  - B8d full 134 (R1 result)
-
-Note: B0/B1/B2/B3/B4/B5 don't carry causal info, so A4 framing doesn't apply
-— we use the original v3 prompts. Their main-table value is unchanged from
-the partial 48-58 data we collected earlier (we just extend to 134).
-"""
-
 from __future__ import annotations
 import json
 import os
@@ -26,7 +8,6 @@ import traceback
 import yaml
 from typing import Any, Dict, List
 
-# API configuration is read from the environment.
 AZURE_API_KEY = os.environ.get("FED_CAUSAL_API_KEY") or os.environ.get("OPENAI_API_KEY")
 AZURE_API_BASE = os.environ.get("FED_CAUSAL_API_BASE_URL") or os.environ.get("OPENAI_BASE_URL")
 MODEL_NAME = os.environ.get("FED_CAUSAL_MODEL", "openai/gpt-5.4-mini")
@@ -69,11 +50,7 @@ def _patched_completion(*args, **kwargs):
 litellm.completion = _patched_completion
 
 
-# ====================================================================
-# ALF prompt headers (mix: original + A4-style)
-# ====================================================================
 
-# Same 10 annotated cross-module edges as R1
 ANNOTATED_EDGES_ALF = (
     "navigation→container_access (agent_at unlocks visible_inside of receptacle), "
     "container_access→object_manipulation (container_opened enables pick of contents), "
@@ -89,7 +66,6 @@ ANNOTATED_EDGES_ALF = (
 
 
 BASELINE_HEADERS = {
-    # ---- Non-causal baselines (no A4 needed; same prompts as v3) ----
     "B0_NoWM": "WORLD MODEL: None. Act greedily; do not plan ahead.",
     "B1_LocalWM": (
         "WORLD MODEL: Per-module LOCAL only. Track current module state only."),
@@ -102,7 +78,6 @@ BASELINE_HEADERS = {
         "WORLD MODEL: TEMPORAL PRECEDENCE. Appliances toggled now will flip "
         "properties 1-3 steps later."),
 
-    # ---- A4-style causal baselines ----
     "B7d_AnnotatedNoFraming_NoInt": (
         "OPERATIONAL DEPENDENCIES across the 6 modules of the ALFWorld "
         "household (navigation, container_access, object_manipulation, "
@@ -130,9 +105,6 @@ BASELINE_HEADERS = {
         "\nThese dependencies describe how the modules interact."
     ),
     "B10d_AnnotatedNoFraming_Oracle": (
-        # B10 sanity: A4-style framing applied to oracle. Same as B8d here
-        # because ALF modular_spec edges = oracle edges (10 deterministic
-        # PDDL-derived). Difference vs B8d is purely epistemic anchor.
         "GROUND-TRUTH OPERATIONAL DEPENDENCIES (ALFWorld PDDL-derived oracle) "
         "across the 6 modules (navigation, container_access, "
         "object_manipulation, appliance, object_property, task_monitor):\n"
@@ -268,7 +240,6 @@ def run_one_task(baseline_id: str, env, max_steps: int = 50) -> Dict[str, Any]:
     history_actions = []
     last_obs = ""
     same_obs_count = 0
-    # Track state-regression-style stats
     n_redundant_actions = 0
 
     system = f"{header}\n\n{SYSTEM_INSTRUCTIONS}"
@@ -363,7 +334,6 @@ def run_baseline(baseline_id: str, n_tasks: int, env_factory,
         }
         fp.write(json.dumps(rec) + "\n"); fp.flush()
         per_task.append(rec)
-        # Touch heartbeat every 5 tasks to avoid 30min lapse
         if idx % 5 == 0:
             try:
                 with open("/tmp/fedcausalworld_heartbeat_alf", "w") as pf:

@@ -1,35 +1,3 @@
-"""
-exp1_taubench_a4.py — A4 ablation per specification (2026-06-21 20:03 JST).
-
-H0.method_Exp1_taubench_a4: A3 + drop "causal/validated/FedCausalCompose"
-framing → B8d ≥ B2 + 5pp on τ-bench 21-task.
-
-A3 already had 14 ground-truth edges (modularization_spec §1.3), so A4 differs
-from A3 only in FRAMING (the surrounding tokens, not the edges).
-
-A3 prompt opening:
-  "WORLD MODEL: FedCausalCompose — causal graph composed from local modular
-   mechanisms. ... Use this causal graph to PREDICT downstream module effects ...
-   The graph was validated by federated intervention-response matching."
-
-A4 prompt opening (B10-like, no causal/validated language):
-  "OPERATIONAL DEPENDENCIES: the retail system has 6 functional modules ...
-   Use the dependency list above to anticipate downstream module effects when
-   executing each tool call."
-
-Specifically dropped tokens vs A3:
-  - "FedCausalCompose" (method name anchor)
-  - "causal graph" (theoretical framing)
-  - "validated by federated intervention-response matching" (epistemic
-    hedging that may make agent doubt the graph)
-  - "WORLD MODEL: FedCausalCompose —" (paper-style header)
-Kept from A3:
-  - All 14 annotated edges (operational semantics)
-  - Modular system structure
-  - PREDICT verb (B10 also has)
-  - Tool-calling agent harness (unchanged)
-"""
-
 from __future__ import annotations
 import json
 import os
@@ -80,9 +48,6 @@ def _patched_completion(*args, **kwargs):
 litellm.completion = _patched_completion
 
 
-# ============================================================================
-# A4 prompt: A3 edges + B10-like framing (no "causal"/"validated"/"FedCausalCompose")
-# ============================================================================
 
 ANNOTATED_EDGES_RETAIL = (
     "account→order (authentication gates create_order), "
@@ -113,9 +78,6 @@ BASELINE_HEADERS_A4 = {
 }
 
 
-# ============================================================================
-# Harness identical to A3 (PromptHeaderAgent + ToolCallingAgent)
-# ============================================================================
 
 from tau_bench.envs.retail.env import MockRetailDomainEnv
 from tau_bench.agents.tool_calling_agent import ToolCallingAgent

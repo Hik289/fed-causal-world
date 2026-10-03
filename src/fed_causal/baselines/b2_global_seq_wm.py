@@ -1,11 +1,3 @@
-"""
-B2: Global Sequence World Model — concatenates ALL modules' events as a global
-time-ordered sequence and asks the LLM to predict next event. NO causal graph,
-NO intervention semantics. The single most important non-causal baseline.
-
-Reference: Wang et al. 2024 (LLMs as text-based world simulators) + DyMo 2025.
-"""
-
 from .base import BaselineBase, render_event_history, render_module_list
 from event_traces import Task
 

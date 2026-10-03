@@ -1,12 +1,3 @@
-"""
-P1.5: Multi-seed Synthetic G6 sweep (γ, α, d).
-
-exp7_g6_v2 was single-seed (seed=0). This re-runs with 3 seeds {0,1,2}
-to provide robustness for paper §3 Theorem 1 verification.
-
-CPU only, ~10 min.
-"""
-
 import argparse
 import json
 import os
@@ -18,7 +9,7 @@ import numpy as np
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO_ROOT)
 sys.path.insert(0, os.path.join(REPO_ROOT, "src"))
-from fed_causal.synthetic_scm_skeleton import (  # noqa: E402
+from fed_causal.synthetic_scm_skeleton import (
     SCMConfig,
     generate_all_splits,
     simulate,
@@ -85,7 +76,6 @@ def main():
     alpha_values = [0.0, 0.25, 0.5, 0.75, 1.0]
     gamma_values = [0.0, 0.25, 0.5, 0.75, 1.0]
 
-    # γ sweep (most important)
     print("\n-- γ sweep --")
     g_runs_per_seed = {}
     for s in args.seeds:
@@ -97,7 +87,6 @@ def main():
             g_runs_per_seed[s].append(r)
             print(f"  seed {s} γ={g}: Δ={r['delta_causal_MSE']:.4f}")
 
-    # Aggregate per γ across seeds
     gamma_agg = []
     for i, g in enumerate(gamma_values):
         ds = [g_runs_per_seed[s][i]['delta_causal_MSE'] for s in args.seeds]
@@ -107,7 +96,6 @@ def main():
     rho_g = spearman_rho(gamma_values, gamma_means)
     print(f"\nγ: aggregate means {[round(m, 3) for m in gamma_means]}, ρ={rho_g:+.3f}")
 
-    # α sweep
     print("\n-- α sweep --")
     a_runs_per_seed = {}
     for s in args.seeds:
@@ -127,7 +115,6 @@ def main():
     rho_a = spearman_rho(alpha_values, alpha_means)
     print(f"α: aggregate means {[round(m, 3) for m in alpha_means]}, ρ={rho_a:+.3f}")
 
-    # d sweep
     print("\n-- d sweep --")
     d_runs_per_seed = {}
     for s in args.seeds:

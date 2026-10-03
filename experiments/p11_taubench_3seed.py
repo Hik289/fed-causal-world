@@ -1,17 +1,3 @@
-"""
-P1.1: 3-seed τ-bench rerun for 5 baselines (B2, B7d, B8d, B9, B10).
-
-Multi-seed strategy: same 21 retail test tasks, repeat 3 times.
-Sources of randomness:
-  - User simulator LLM responses (Azure GPT-5.4-mini, temperature=0.7 instead
-    of 0.0 to ensure variation across reruns — this is the standard
-    multi-seed setup for LLM-agent benchmarks)
-  - Tool-calling agent temperature kept at 0.0 (deterministic decisions
-    given context)
-
-Output: per-seed task-level Task Success, aggregated to mean ± Wilson CI.
-"""
-
 import argparse
 import json
 import os
@@ -20,7 +6,6 @@ import time
 import traceback
 from typing import Any, Dict, List
 
-# API configuration is read from the environment.
 AZURE_API_KEY = os.environ.get("FED_CAUSAL_API_KEY") or os.environ.get("OPENAI_API_KEY")
 AZURE_API_BASE = os.environ.get("FED_CAUSAL_API_BASE_URL") or os.environ.get("OPENAI_BASE_URL")
 MODEL_NAME = os.environ.get("FED_CAUSAL_MODEL", "openai/gpt-5.4-mini")
@@ -31,7 +16,7 @@ PRICE_OUTPUT_PER_1M = 2.00
 import litellm
 _original_completion = litellm.completion
 _usage_log: List[Dict[str, Any]] = []
-_current_seed = 0  # mutated per-task by main()
+_current_seed = 0
 
 
 def _patched_completion(*args, **kwargs):
@@ -42,14 +27,11 @@ def _patched_completion(*args, **kwargs):
     if not kwargs.get("model", "").endswith(DEPLOYMENT):
         kwargs["model"] = MODEL_NAME
     kwargs.setdefault("custom_llm_provider", "openai")
-    # Apply seed-based randomness to user simulator only
-    # (user simulator gets temperature 0.7; agent stays 0.0)
-    # We identify user simulator by checking if "user" appears in system message
     msgs = kwargs.get("messages", [])
     sys_msg = next((m["content"] for m in msgs if m.get("role") == "system"), "")
     if "user interacting" in sys_msg.lower() or "simulate the user" in sys_msg.lower():
         kwargs["temperature"] = 0.7
-        kwargs["seed"] = _current_seed  # OpenAI-compatible seed param
+        kwargs["seed"] = _current_seed
     else:
         kwargs["temperature"] = 0.0
     t0 = time.time()
@@ -74,7 +56,6 @@ def _patched_completion(*args, **kwargs):
 litellm.completion = _patched_completion
 
 
-# Reuse prompt headers from existing scripts
 ANNOTATED_EDGES_RETAIL = (
     "account→order (authentication gates create_order), "
     "order→payment (order_placed triggers authorize_payment), "
@@ -92,7 +73,6 @@ ANNOTATED_EDGES_RETAIL = (
     "account→shipment (address modulates delivery_days)."
 )
 
-# Oracle annotated edges (B10)
 ORACLE_EDGES_FULL = (
     "GROUND-TRUTH causal interface edges (Oracle): "
     + ANNOTATED_EDGES_RETAIL +
@@ -204,13 +184,12 @@ def run_baseline_seed(baseline_id: str, seed: int, task_indices: List[int],
 
 
 def wilson_ci_halfwidth(p_hat: float, n: int, z: float = 1.96) -> float:
-    """Wilson 95% CI half-width for proportion p_hat with n trials."""
     if n == 0: return 0.0
     p = p_hat / 100.0
     denom = 1 + z**2 / n
     center = (p + z**2 / (2*n)) / denom
     margin = z * ((p*(1-p)/n + z**2/(4*n**2))**0.5) / denom
-    return margin * 100  # back to pp
+    return margin * 100
 
 
 def main():
@@ -243,13 +222,11 @@ def main():
 
     elapsed = time.time() - t_global
 
-    # Aggregate per baseline (mean across seeds + Wilson CI on combined data)
     print("\n=== AGGREGATE ===")
     print(f"{'Baseline':<35} {'seed0_TS':>10} {'seed1_TS':>10} {'seed2_TS':>10} {'mean':>8} {'CI_half':>8}")
     aggregate = {}
     for b, seed_runs in all_results.items():
         ts_per_seed = [r["task_success_rate_pp"] for r in seed_runs]
-        # Combine all tasks across seeds → pool of n_tasks × n_seeds for Wilson
         total_n = sum(r["n_tasks"] for r in seed_runs)
         total_won = sum(r["task_success_count"] for r in seed_runs)
         mean_ts = 100.0 * total_won / max(1, total_n)
@@ -266,7 +243,6 @@ def main():
         print(f"{b:<35} {ts_per_seed[0]:>10.2f} {ts_per_seed[1]:>10.2f} "
               f"{ts_per_seed[2]:>10.2f} {mean_ts:>8.2f} {ci:>+8.2f}")
 
-    # G1 / G4: B8d vs B2 paired analysis
     if "B8d_AnnotatedNoFraming" in aggregate and "B2_GlobalSeqWM" in aggregate:
         b8d = aggregate["B8d_AnnotatedNoFraming"]
         b2 = aggregate["B2_GlobalSeqWM"]
@@ -275,8 +251,6 @@ def main():
         print(f"  B8d {b8d['mean_TS_pooled']}% ± {b8d['wilson_CI_halfwidth_pp']}pp")
         print(f"  B2  {b2['mean_TS_pooled']}% ± {b2['wilson_CI_halfwidth_pp']}pp")
         print(f"  Gap = {gap:+.2f}pp (gate ≥+5pp: {'PASS' if gap >= 5 else 'BORDERLINE/FAIL'})")
-        # Paired McNemar-style: per-task agreement
-        # combine all per-task across seeds, paired by (task_idx, seed)
         b8d_tasks = {(r['task_idx'], r['seed']): r['task_success']
                      for run in all_results["B8d_AnnotatedNoFraming"] for r in run['per_task']}
         b2_tasks = {(r['task_idx'], r['seed']): r['task_success']

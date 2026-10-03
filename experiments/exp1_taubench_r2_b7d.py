@@ -1,23 +1,3 @@
-"""
-exp1_taubench_r2_b7d.py — R2 ablation: B7d = B7 with A4-style framing.
-
-Per specification (2026-06-21 11:18 UTC): test if applying A4 framing
-(annotated edges + drop "confounded/ambiguous/causal" anchor) also rescues B7.
-
-B7 main was: "WORLD MODEL: CAUSAL graph from OBSERVATIONAL data only" +
-"learned from observation only (NO intervention-based validation)" +
-"some edges may be confounded or directionally ambiguous"
-→ TS = 23.81% on τ-bench (main result)
-
-B7d (R2): drop all "causal/validated/confounded/ambiguous" framing.  Use
-B10-like "OPERATIONAL DEPENDENCIES" header + same annotated edge list as A4.
-The ONLY difference vs A4 B8d is a semantic flag: "observational-only,
-no intervention evidence" — i.e. B7 still has weaker info than B8.
-
-For isolation purposes we keep the spec-level distinction but drop the
-epistemic-hedging wording that may have hurt B7.
-"""
-
 from __future__ import annotations
 import json
 import os
@@ -68,7 +48,6 @@ def _patched_completion(*args, **kwargs):
 litellm.completion = _patched_completion
 
 
-# Same 14 annotated edges as A4 (B8d).
 ANNOTATED_EDGES_RETAIL = (
     "account→order (authentication gates create_order), "
     "order→payment (order_placed triggers authorize_payment), "

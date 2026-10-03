@@ -1,14 +1,3 @@
-"""
-P1.2: 3-seed ALF rerun for 5 baselines.
-
-Multi-seed strategy: same 134 valid_unseen tasks, repeated 3 times.
-Source of randomness: LLM agent at temperature=0.7 for seeds 1,2 (seed 0 uses temp 0.0).
-
-Actually for cleanest stat: ALF env is deterministic; agent at temp=0 is
-deterministic given context. The only seed dependence is via temperature.
-We use seed 0 at temp=0 (matches Exp4 single-seed) + seeds 1,2 at temp=0.5.
-"""
-
 import argparse, json, os, re, sys, time, traceback, yaml
 import numpy as np
 from typing import Any, Dict, List
