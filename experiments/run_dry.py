@@ -1,18 +1,14 @@
 from __future__ import annotations
+import argparse
+import importlib
 import json
 import os
+from pathlib import Path
 import sys
 import time
 from typing import List, Dict, Any
 
-from event_traces import synth_task_pool, BENCHMARKS
-from baselines.b2_global_seq_wm import B2_GlobalSeqWM
-from llm_client import get_counter, reset_counter
-from metrics import aggregate
-
-
 OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dry_run_out")
-os.makedirs(OUT_DIR, exist_ok=True)
 
 
 DRY_RUN_PLAN = [
@@ -32,6 +28,14 @@ BUDGET_CAP_USD = 500.0
 
 
 def run_dry() -> Dict[str, Any]:
+    source_directory = Path(__file__).resolve().parents[1] / "src" / "fed_causal"
+    sys.path.insert(0, str(source_directory))
+    from event_traces import synth_task_pool
+    from baselines.b2_global_seq_wm import B2_GlobalSeqWM
+    from llm_client import get_counter, reset_counter
+    from metrics import aggregate
+
+    os.makedirs(OUT_DIR, exist_ok=True)
     reset_counter()
     baseline = B2_GlobalSeqWM()
     predictions_path = os.path.join(OUT_DIR, "predictions.jsonl")
@@ -124,7 +128,39 @@ def run_dry() -> Dict[str, Any]:
     return summary
 
 
-if __name__ == "__main__":
+EXPERIMENTS = {
+    "theory": ("experiments.p15_synthetic_3seed", "theory_sweeps_main", "Confounding, proxies, depth, coverage, and spectral stability."),
+    "interfaces": ("fed_causal.pipeline", "construct_interfaces_main", "Interface recovery and construction cost from supplied traces."),
+    "modular": ("experiments.exp1_taubench", "modular_evaluation_main", "ALFWorld and tau-bench graph, control, attention, and feedback evaluations."),
+    "scienceworld": ("experiments.exp1_taubench", "scienceworld_evaluation_main", "ScienceWorld task scores with supplied interface graphs."),
+    "apibank": ("experiments.exp1_taubench", "apibank_evaluation_main", "APIBank persistent-state dialogue diagnostics."),
+    "summarize": ("fed_causal.metrics", "summarize_agent_runs_main", "Aggregate saved outputs and compare matched tasks."),
+}
+
+
+def paper_experiments_main(argv=None):
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    parser = argparse.ArgumentParser(
+        description="Experiment entrypoints in the original repository files. External data and configurations are required; published results are not embedded.",
+        epilog="Pass an experiment name followed by --help for its arguments. With no arguments, run_dry.py retains its original pilot experiment.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("experiment", choices=EXPERIMENTS,
+                        help="\n".join(f"{key}: {value[2]}" for key, value in EXPERIMENTS.items()))
+    if not arguments or arguments[0] in ("-h", "--help"):
+        parser.print_help()
+        return
+    selected = parser.parse_args(arguments[:1])
+    repository = Path(__file__).resolve().parents[1]
+    sys.path.insert(0, str(repository))
+    sys.path.insert(0, str(repository / "src"))
+    module, entrypoint, _ = EXPERIMENTS[selected.experiment]
+    getattr(importlib.import_module(module), entrypoint)(arguments[1:])
+
+
+if __name__ == "__main__" and len(sys.argv) > 1:
+    paper_experiments_main()
+elif __name__ == "__main__":
     s = run_dry()
     if s["over_budget"]:
         print(f"!!! OVER BUDGET: projected ${s['extrapolated_total_usd']:.2f} > "
